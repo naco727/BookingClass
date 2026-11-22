@@ -11,7 +11,7 @@ type View = 'home' | 'register' | 'book' | 'teacher'
 const navItems: Array<{ id: View; label: string }> = [{ id: 'home', label: '首頁' }, { id: 'register', label: '新生登記' }, { id: 'book', label: '家長選課' }, { id: 'teacher', label: '老師後台' }]
 const weekdayLabels: Record<Weekday, string> = { 0: '星期日', 1: '星期一', 2: '星期二', 3: '星期三', 4: '星期四', 5: '星期五', 6: '星期六' }
 const formatTimestamp = (value: string) => new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
-const timeOptions = Array.from({ length: 49 }, (_, index) => `${String(Math.floor(index / 2)).padStart(2, '0')}:${index % 2 ? '30' : '00'}`)
+const timeOptions = Array.from({ length: 96 }, (_, index) => `${String(Math.floor(index / 4)).padStart(2, '0')}:${String((index % 4) * 15).padStart(2, '0')}`)
 
 function App() {
   const [view, setView] = useState<View>('home')
@@ -90,10 +90,32 @@ function RegistrationPage({ notify, teacher }: { notify: (message: string) => vo
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) { return <label className="field"><span>{label}{required && <i> *</i>}</span>{children}</label> }
 
+function TimeWheels({ value, onChange, options = timeOptions }: { value: string; onChange: (value: string) => void; options?: string[] }) {
+  const safeOptions = Array.from(new Set((options.length ? options : timeOptions).filter((item) => /^\d{2}:\d{2}$/.test(item)))).sort((a, b) => toMinutes(a) - toMinutes(b))
+  const selected = safeOptions.includes(value) ? value : safeOptions[0] ?? '00:00'
+  const [selectedHour, selectedMinute] = selected.split(':')
+  const hours = Array.from(new Set(safeOptions.map((item) => item.slice(0, 2))))
+  const minutes = Array.from(new Set(safeOptions.map((item) => item.slice(3))))
+  const hourRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const minuteRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  useEffect(() => {
+    window.setTimeout(() => {
+      hourRefs.current[selectedHour]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      minuteRefs.current[selectedMinute]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 0)
+  }, [selectedHour, selectedMinute])
+  const choose = (part: 'hour' | 'minute', next: string) => {
+    const candidate = part === 'hour' ? `${next}:${selectedMinute}` : `${selectedHour}:${next}`
+    if (safeOptions.includes(candidate)) { onChange(candidate); return }
+    const compatible = safeOptions.find((item) => part === 'hour' ? item.slice(0, 2) === next : item.slice(3) === next)
+    if (compatible) onChange(compatible)
+  }
+  return <div className="picker-time-wheels"><div className="picker-wheel-column"><span className="picker-wheel-label">時</span><div className="picker-wheel" role="listbox" aria-label="選擇小時">{hours.map((hour) => <button type="button" role="option" aria-selected={hour === selectedHour} className={hour === selectedHour ? 'selected' : ''} key={hour} ref={(element) => { hourRefs.current[hour] = element }} onClick={() => choose('hour', hour)}>{hour}</button>)}</div></div><div className="picker-wheel-column"><span className="picker-wheel-label">分</span><div className="picker-wheel" role="listbox" aria-label="選擇分鐘">{minutes.map((minute) => <button type="button" role="option" aria-selected={minute === selectedMinute} className={minute === selectedMinute ? 'selected' : ''} key={minute} ref={(element) => { minuteRefs.current[minute] = element }} onClick={() => choose('minute', minute)}>{minute}</button>)}</div></div></div>
+}
+
 function TimePicker({ value, onChange, options = timeOptions, disabled = false }: { value: string; onChange: (value: string) => void; options?: string[]; disabled?: boolean }) {
   const [open, setOpen] = useState(false)
-  const safeOptions = options.length ? options : timeOptions
-  return <div className="custom-picker time-picker"><button type="button" className="custom-picker-trigger" disabled={disabled} onClick={() => setOpen((current) => !current)}><Clock3 size={15} /><span>{value || '選擇時間'}</span><ChevronRight size={14} className={open ? 'picker-arrow-open' : ''} /></button>{open && <div className="custom-picker-popover time-picker-popover" role="listbox">{safeOptions.map((time) => <button type="button" role="option" aria-selected={value === time} className={value === time ? 'picker-option active' : 'picker-option'} key={time} onClick={() => { onChange(time); setOpen(false) }}>{time}</button>)}</div>}</div>
+  return <div className="custom-picker time-picker"><button type="button" className="custom-picker-trigger" disabled={disabled} onClick={() => setOpen((current) => !current)}><Clock3 size={15} /><span>{value || '選擇時間'}</span><ChevronRight size={14} className={open ? 'picker-arrow-open' : ''} /></button>{open && <div className="custom-picker-popover time-picker-popover" role="dialog" aria-label="自訂時間選擇器"><div className="picker-header"><b>選擇時間</b><small>24 小時制・每 15 分鐘</small></div><TimeWheels value={value} options={options} onChange={onChange} /><button type="button" className="picker-done" onClick={() => setOpen(false)}>完成</button></div>}</div>
 }
 
 const padNumber = (value: number) => String(value).padStart(2, '0')
@@ -114,7 +136,7 @@ function DateTimePicker({ value, onChange }: { value: string; onChange: (value: 
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
   const calendarCells = Array.from({ length: firstDay + daysInMonth }, (_, index) => index < firstDay ? null : index - firstDay + 1)
   const commit = (nextDate: string, nextTime: string) => { setDate(nextDate); setTime(nextTime); onChange(`${nextDate}T${nextTime}`) }
-  return <div className="custom-picker datetime-picker"><button type="button" className="custom-picker-trigger" onClick={() => setOpen((current) => !current)}><CalendarDays size={15} /><span>{date.replaceAll('-', '/')} {time}</span><ChevronRight size={14} className={open ? 'picker-arrow-open' : ''} /></button>{open && <div className="custom-picker-popover datetime-picker-popover"><div className="picker-calendar-head"><button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button><b>{month.getFullYear()} 年 {month.getMonth() + 1} 月</b><button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button></div><div className="picker-calendar-week">{['日','一','二','三','四','五','六'].map((label) => <span key={label}>{label}</span>)}</div><div className="picker-calendar-grid">{calendarCells.map((day, index) => day ? <button type="button" key={day} className={date === `${month.getFullYear()}-${padNumber(month.getMonth() + 1)}-${padNumber(day)}` ? 'calendar-picker-day active' : 'calendar-picker-day'} onClick={() => commit(`${month.getFullYear()}-${padNumber(month.getMonth() + 1)}-${padNumber(day)}`, time)}>{day}</button> : <span key={`empty-${index}`} />)}</div><div className="picker-time-title"><Clock3 size={14} />選擇時間</div><div className="picker-time-grid">{timeOptions.slice(0, -1).map((item) => <button type="button" key={item} className={time === item ? 'picker-option active' : 'picker-option'} onClick={() => { commit(date, item); setOpen(false) }}>{item}</button>)}</div></div>}</div>
+  return <div className="custom-picker datetime-picker"><button type="button" className="custom-picker-trigger" onClick={() => setOpen((current) => !current)}><CalendarDays size={15} /><span>{date.replaceAll('-', '/')} {time}</span><ChevronRight size={14} className={open ? 'picker-arrow-open' : ''} /></button>{open && <div className="custom-picker-popover datetime-picker-popover"><div className="picker-calendar-head"><button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button><b>{month.getFullYear()} 年 {month.getMonth() + 1} 月</b><button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button></div><div className="picker-calendar-week">{['日','一','二','三','四','五','六'].map((label) => <span key={label}>{label}</span>)}</div><div className="picker-calendar-grid">{calendarCells.map((day, index) => day ? <button type="button" key={day} className={date === `${month.getFullYear()}-${padNumber(month.getMonth() + 1)}-${padNumber(day)}` ? 'calendar-picker-day active' : 'calendar-picker-day'} onClick={() => commit(`${month.getFullYear()}-${padNumber(month.getMonth() + 1)}-${padNumber(day)}`, time)}>{day}</button> : <span key={`empty-${index}`} />)}</div><div className="picker-time-title"><Clock3 size={14} />選擇時間</div><TimeWheels value={time} options={timeOptions} onChange={(nextTime) => commit(date, nextTime)} /><button type="button" className="picker-done" onClick={() => setOpen(false)}>完成</button></div>}</div>
 }
 
 function ParentBookingPage({ notify, teacher }: { notify: (message: string) => void; teacher: TeacherProfile | null }) {
