@@ -107,7 +107,9 @@ function TimeWheels({ value, onChange, options = timeOptions }: { value: string;
   const choose = (part: 'hour' | 'minute', next: string) => {
     const candidate = part === 'hour' ? `${next}:${selectedMinute}` : `${selectedHour}:${next}`
     if (safeOptions.includes(candidate)) { onChange(candidate); return }
-    const compatible = safeOptions.find((item) => part === 'hour' ? item.slice(0, 2) === next : item.slice(3) === next)
+    const compatible = part === 'hour'
+      ? safeOptions.find((item) => item.slice(0, 2) === next)
+      : safeOptions.find((item) => item.slice(0, 2) === selectedHour) ?? safeOptions.find((item) => item.slice(3) === next)
     if (compatible) onChange(compatible)
   }
   return <div className="picker-time-wheels"><div className="picker-wheel-column"><span className="picker-wheel-label">時</span><div className="picker-wheel" role="listbox" aria-label="選擇小時">{hours.map((hour) => <button type="button" role="option" aria-selected={hour === selectedHour} className={hour === selectedHour ? 'selected' : ''} key={hour} ref={(element) => { hourRefs.current[hour] = element }} onClick={() => choose('hour', hour)}>{hour}</button>)}</div></div><div className="picker-wheel-column"><span className="picker-wheel-label">分</span><div className="picker-wheel" role="listbox" aria-label="選擇分鐘">{minutes.map((minute) => <button type="button" role="option" aria-selected={minute === selectedMinute} className={minute === selectedMinute ? 'selected' : ''} key={minute} ref={(element) => { minuteRefs.current[minute] = element }} onClick={() => choose('minute', minute)}>{minute}</button>)}</div></div></div>
