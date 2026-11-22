@@ -54,3 +54,14 @@ npm run dev
 ```powershell
 npm run build
 ```
+
+## GitHub Pages 部署
+
+Vite 已設定 `base: '/BookingClass/'`。`.github/workflows/deploy-pages.yml` 會在 `main` push 後自動建置並發布 `dist/`。
+
+請在 GitHub repository 的 Settings → Secrets and variables → Actions → Variables 新增：
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+
+並在 Settings → Pages 將來源設為 GitHub Actions。正式網站網址為 `https://naco727.github.io/BookingClass/`；Supabase Auth 的 Site URL 與邀請回跳網址也要使用這個完整網址。
