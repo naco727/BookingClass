@@ -469,7 +469,7 @@ footer { margin-top:auto; padding:25px 5.5vw; display:flex; justify-content:spac
 .picker-calendar-head button { width:30px; height:30px; border-radius:9px; background:#edf3ed; color:#4d7860; font-size:19px; }
 .picker-calendar-week, .picker-calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; }
 .picker-calendar-week span { padding:3px 0; text-align:center; color:#8b9992; font-size:10px; font-weight:700; }
-.calendar-picker-day { min-height:34px; border-radius:8px; background:transparent; color:var(--ink); font-size:12px; }
+.calendar-picker-day { min-height:34px; border:0; border-radius:8px; background:transparent; color:var(--ink); font-size:12px; }
 .calendar-picker-day:hover, .calendar-picker-day.active { background:#4d7860; color:#fff; }
 .picker-time-title { display:flex; align-items:center; gap:5px; margin:13px 0 7px; padding-top:11px; border-top:1px solid #edf0ea; color:#5b706a; font-size:11px; font-weight:700; }
 .picker-time-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; max-height:145px; overflow-y:auto; }
