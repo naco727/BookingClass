@@ -574,10 +574,12 @@ footer { margin-top:auto; padding:25px 5.5vw; display:flex; justify-content:spac
   .security-panel > div { min-width:0; }
   .security-panel p { overflow-wrap:anywhere; }
 
-  .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-  .metric-card { min-height:96px; padding:15px 14px; border-radius:15px; box-shadow:0 7px 20px rgba(31,62,59,.06); }
-  .metric-card > span { font-size:10px; }
-  .metric-card strong { margin-top:12px; font-size:27px; }
+  .metric-grid { grid-template-columns:minmax(0,1fr); gap:10px; }
+  .metric-card { min-height:128px; padding:24px 20px; border-radius:16px; display:flex; align-items:center; gap:2px; box-shadow:0 10px 28px rgba(31,62,59,.07); }
+  .metric-card > span { font-size:13px; }
+  .metric-card strong { margin:0; font-size:32px; line-height:1; }
+  .metric-card strong small { font-size:13px; margin-left:2px; }
+  .metric-line { display:none; }
   .dashboard-grid { gap:12px; }
   .attention-panel { border-radius:15px; box-shadow:0 7px 20px rgba(31,62,59,.05); }
 
