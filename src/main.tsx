@@ -136,6 +136,22 @@ const dateFromInput = (value: string) => {
 function DateTimePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const initial = dateFromInput(value)
   const [open, setOpen] = useState(false)
+  const [step, setStep] = useState<'date' | 'time'>('date')
+  const [date, setDate] = useState(initial.date)
+  const [time, setTime] = useState(initial.time)
+  const [month, setMonth] = useState(initial.month)
+  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay()
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
+  const calendarCells = Array.from({ length: firstDay + daysInMonth }, (_, index) => index < firstDay ? null : index - firstDay + 1)
+  const chooseDate = (nextDate: string) => { setDate(nextDate); onChange(`${nextDate}T${time}`); setStep('time') }
+  const chooseTime = (nextTime: string) => { setTime(nextTime); onChange(`${date}T${nextTime}`) }
+  const toggle = () => { if (!open) setStep('date'); setOpen((current) => !current) }
+  return <div className="custom-picker datetime-picker"><button type="button" className="custom-picker-trigger" onClick={toggle}><CalendarDays size={15} /><span>{date.replaceAll('-', '/')} {time}</span><ChevronRight size={14} className={open ? 'picker-arrow-open' : ''} /></button>{open && <div className="custom-picker-popover datetime-picker-popover">{step === 'date' ? <><div className="picker-header"><b>先選擇日期</b><small>選好日期後設定時間</small></div><div className="picker-calendar-head"><button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button><b>{month.getFullYear()} 年 {month.getMonth() + 1} 月</b><button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button></div><div className="picker-calendar-week">{['日','一','二','三','四','五','六'].map((label) => <span key={label}>{label}</span>)}</div><div className="picker-calendar-grid">{calendarCells.map((day, index) => day ? <button type="button" key={day} className={date === `${month.getFullYear()}-${padNumber(month.getMonth() + 1)}-${padNumber(day)}` ? 'calendar-picker-day active' : 'calendar-picker-day'} onClick={() => chooseDate(`${month.getFullYear()}-${padNumber(month.getMonth() + 1)}-${padNumber(day)}`)}>{day}</button> : <span key={`empty-${index}`} />)}</div></> : <><div className="picker-header"><button type="button" className="picker-step-back" onClick={() => setStep('date')}>‹</button><div><b>再選擇時間</b><small>{date.replaceAll('-', '/')}</small></div><span className="picker-step-badge">第 2 步</span></div><div className="picker-time-title"><Clock3 size={14} />24 小時制・每 15 分鐘</div><TimeWheels value={time} options={timeOptions} onChange={chooseTime} /><button type="button" className="picker-done" onClick={() => setOpen(false)}>完成</button></>}</div>}</div>
+}
+
+function DateTimePickerLegacy({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const initial = dateFromInput(value)
+  const [open, setOpen] = useState(false)
   const [date, setDate] = useState(initial.date)
   const [time, setTime] = useState(initial.time)
   const [month, setMonth] = useState(initial.month)
