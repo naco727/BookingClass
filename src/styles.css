@@ -12,7 +12,8 @@ button:disabled { cursor:not-allowed; opacity:.56; }
 .scoped-loading { min-height:100vh; display:grid; place-items:center; color:#6e8980; font-size:14px; }
 .brand { border:0; background:none; display:flex; align-items:center; gap:10px; color:var(--ink); padding:0; text-align:left; font-size:22px; font-weight:800; letter-spacing:.05em; }
 .brand small { display:block; font-family:'DM Mono'; font-size:8px; letter-spacing:.16em; font-weight:500; color:var(--muted); margin-top:2px; }
-.brand-mark { width:34px; height:34px; display:grid; place-items:center; color:var(--white); background:var(--ink); border-radius:11px 11px 11px 3px; }
+.brand-mark { width:34px; height:34px; display:grid; place-items:center; overflow:hidden; color:var(--white); background:#ffad7b; border-radius:11px 11px 11px 3px; }
+.brand-image { display:block; width:100%; height:100%; object-fit:cover; }
 .nav { display:flex; gap:6px; align-items:center; }
 .nav button { border:0; background:transparent; padding:10px 16px; color:#617572; font-size:14px; display:flex; gap:5px; align-items:center; border-radius:999px; }
 .nav button:hover,.nav button.active { color:var(--ink); background:#e9efea; }
@@ -266,7 +267,7 @@ footer { margin-top:auto; padding:25px 5.5vw; display:flex; justify-content:spac
 /* Teacher root login is intentionally a short, direct entry screen. */
 .compact-login { display:grid; place-items:center; min-height:100vh; padding:24px; background:#f4f7f3; }
 .compact-login .login-panel { width:min(420px,100%); padding:32px; border:1px solid #e1e8e1; border-radius:18px; box-shadow:0 18px 50px rgba(31,62,59,.09); justify-content:flex-start; }
-.compact-login .login-brand-mark { width:38px; height:38px; display:grid; place-items:center; margin-bottom:18px; color:#fffdfa; background:var(--ink); border-radius:12px 12px 12px 4px; }
+.compact-login .login-brand-mark { width:48px; height:48px; display:grid; place-items:center; overflow:hidden; margin-bottom:18px; color:#fffdfa; background:#ffad7b; border-radius:14px 14px 14px 5px; }
 .compact-login .login-panel h2 { margin-top:12px; }
 .compact-login .login-panel form { margin-top:22px; }
 @media (max-width:650px) {
