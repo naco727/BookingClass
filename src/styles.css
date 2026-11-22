@@ -332,7 +332,10 @@ footer { margin-top:auto; padding:25px 5.5vw; display:flex; justify-content:spac
 .availability-rows-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:15px; }
 .availability-rows-head b { display:block; color:#3d635b; font-size:15px; }
 .availability-rows-head small { display:block; margin-top:4px; color:#98a49e; font-size:10px; }
-.availability-rows-head .button { flex:none; }
+.availability-head-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+.availability-head-actions .button { flex:none; }
+.danger-outline { border:1px solid #e6c9c1; background:#fff7f4; color:#b86f61; }
+.danger-outline:hover:not(:disabled) { border-color:#dca99c; background:#fff0eb; }
 .availability-day { border-top:1px solid #edf1ed; padding:13px 0 2px; }
 .availability-day-title { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:9px; }
 .availability-day-title b { color:#5f7f76; font-size:12px; }
@@ -544,7 +547,7 @@ footer { margin-top:auto; padding:25px 5.5vw; display:flex; justify-content:spac
   .settings-panel,
   .security-panel { width:100%; max-width:none; min-width:0; }
 
-  .settings-panel { padding:16px; overflow:hidden; }
+  .settings-panel { padding:16px; overflow:visible; }
   .settings-panel h2 { font-size:20px; line-height:1.35; }
   .settings-panel p { max-width:none; font-size:12px; line-height:1.7; }
 
@@ -570,4 +573,19 @@ footer { margin-top:auto; padding:25px 5.5vw; display:flex; justify-content:spac
   .security-panel { padding:16px; }
   .security-panel > div { min-width:0; }
   .security-panel p { overflow-wrap:anywhere; }
+
+  .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .metric-card { min-height:96px; padding:15px 14px; border-radius:15px; box-shadow:0 7px 20px rgba(31,62,59,.06); }
+  .metric-card > span { font-size:10px; }
+  .metric-card strong { margin-top:12px; font-size:27px; }
+  .dashboard-grid { gap:12px; }
+  .attention-panel { border-radius:15px; box-shadow:0 7px 20px rgba(31,62,59,.05); }
+
+  .availability-rows-head { align-items:stretch; flex-direction:column; gap:12px; }
+  .availability-head-actions { display:grid; grid-template-columns:minmax(0,1fr); width:100%; }
+  .availability-head-actions .button { width:100%; justify-content:center; }
+
+  .custom-picker-popover { bottom:calc(82px + env(safe-area-inset-bottom)); max-height:calc(100dvh - 100px); }
+  .datetime-picker-popover,
+  .time-picker-popover { max-height:calc(100dvh - 100px); }
 }
