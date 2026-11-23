@@ -476,7 +476,7 @@ function ScheduleTabV2({ slots, students, regionOptions, teacherId, bookingWindo
     setDeletingAll(true)
     try { for (const slot of slots) await deleteSlot(slot.id, teacherId); await reload(); notify('現有課表已刪除') } catch (error) { notify(error instanceof Error ? error.message : '刪除課表失敗') } finally { setDeletingAll(false) }
   }
-  return <div className="tab-content"><div className="schedule-actions schedule-actions-compact"><div><h2>本學期固定課表</h2><p>先設定每週空堂，再切換到課表編輯預約。</p></div><button type="button" className="button danger-outline" onClick={() => void clearSchedule()} disabled={deletingAll || !slots.length}>刪除現有課表</button></div><div className="schedule-mode-switch" role="tablist" aria-label="設定與課表"><button className={scheduleMode === 'availability' ? 'active' : ''} onClick={() => setScheduleMode('availability')}>設定</button><button className={scheduleMode === 'calendar' ? 'active' : ''} onClick={() => setScheduleMode('calendar')}>課表</button></div>{scheduleMode === 'availability' ? <AvailabilityRows slots={slots} regionOptions={regionOptions} teacherId={teacherId} reload={reload} notify={notify} /> : <><div className="schedule-edit-hint"><Clock3 size={15} /> 搶課結束後長按空白格新增正式學生；點按彩色區塊查看學生或編輯時段。</div><WeeklyTimetableV2 slots={slots} onLongPress={beginAdd} onSlotClick={(slot) => setAction({ type: 'slot', slot })} onBookingClick={(booking, slot) => setAction({ type: 'booking', booking, slot })} />{!slots.length && <div className="public-empty teacher-empty"><Clock3 size={26} /><h3>目前沒有時段</h3><p>請切換到設定新增上午或下午時段。</p></div>}</>}{adding && <div className="modal-backdrop"><div className="modal"><button className="modal-close" onClick={() => setAdding(false)}><X /></button><div className="eyebrow">NEW SLOT</div><h2>新增固定時段</h2><div className="form-grid two"><Field label="星期"><select value={weekday} onChange={(e) => setWeekday(Number(e.target.value) as Weekday)}>{(Object.entries(weekdayLabels) as Array<[string, string]>).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field><Field label="預先限區"><select value={region ?? ''} onChange={(e) => setRegion((e.target.value || null) as Region | null)}><option value="">不指定</option>{regionOptions.map((item) => <option key={item}>{item}</option>)}</select></Field></div><div className="form-grid two"><Field label="開始"><TimePicker value={start} onChange={setStart} /></Field><Field label="結束"><TimePicker value={end} options={timeOptions.filter((time) => toMinutes(time) > toMinutes(start))} onChange={setEnd} /></Field></div><Field label="公開備註"><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="選填" /></Field><div className="modal-actions"><button className="button quiet" onClick={() => setAdding(false)}>取消</button><button className="button primary" onClick={save}>建立時段</button></div></div></div>}{directTarget && <ExistingStudentBookingModal target={directTarget} students={students} teacherId={teacherId} close={() => setDirectTarget(null)} reload={reload} notify={notify} />}{action?.type === 'slot' && <SlotEditorModal slot={action.slot} regionOptions={regionOptions} teacherId={teacherId} close={() => setAction(null)} reload={reload} notify={notify} />}{action?.type === 'booking' && <BookingActionModal booking={action.booking} slot={action.slot} teacherId={teacherId} close={() => setAction(null)} cancel={cancel} reload={reload} notify={notify} />}</div>
+  return <div className="tab-content"><div className="schedule-actions schedule-actions-compact"><div><h2>本學期固定課表</h2><p>先設定每週空堂，再切換到課表編輯預約。</p></div><button type="button" className="button danger-outline" onClick={() => void clearSchedule()} disabled={deletingAll || !slots.length}>刪除現有課表</button></div><div className="schedule-mode-switch" role="tablist" aria-label="設定與課表"><button className={scheduleMode === 'availability' ? 'active' : ''} onClick={() => setScheduleMode('availability')}>設定</button><button className={scheduleMode === 'calendar' ? 'active' : ''} onClick={() => setScheduleMode('calendar')}>課表</button></div>{scheduleMode === 'availability' ? <AvailabilityRows slots={slots} regionOptions={regionOptions} teacherId={teacherId} reload={reload} notify={notify} /> : <><div className="schedule-edit-hint"><Clock3 size={15} /> 搶課結束後長按空白格新增正式學生；點按彩色區塊查看學生或編輯時段。</div><WeeklyTimetableV2 slots={slots} students={students} onLongPress={beginAdd} onSlotClick={(slot) => setAction({ type: 'slot', slot })} onBookingClick={(booking, slot) => setAction({ type: 'booking', booking, slot })} />{!slots.length && <div className="public-empty teacher-empty"><Clock3 size={26} /><h3>目前沒有時段</h3><p>請切換到設定新增上午或下午時段。</p></div>}</>}{adding && <div className="modal-backdrop"><div className="modal"><button className="modal-close" onClick={() => setAdding(false)}><X /></button><div className="eyebrow">NEW SLOT</div><h2>新增固定時段</h2><div className="form-grid two"><Field label="星期"><select value={weekday} onChange={(e) => setWeekday(Number(e.target.value) as Weekday)}>{(Object.entries(weekdayLabels) as Array<[string, string]>).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field><Field label="預先限區"><select value={region ?? ''} onChange={(e) => setRegion((e.target.value || null) as Region | null)}><option value="">不指定</option>{regionOptions.map((item) => <option key={item}>{item}</option>)}</select></Field></div><div className="form-grid two"><Field label="開始"><TimePicker value={start} onChange={setStart} /></Field><Field label="結束"><TimePicker value={end} options={timeOptions.filter((time) => toMinutes(time) > toMinutes(start))} onChange={setEnd} /></Field></div><Field label="公開備註"><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="選填" /></Field><div className="modal-actions"><button className="button quiet" onClick={() => setAdding(false)}>取消</button><button className="button primary" onClick={save}>建立時段</button></div></div></div>}{directTarget && <ExistingStudentBookingModal target={directTarget} students={students} teacherId={teacherId} close={() => setDirectTarget(null)} reload={reload} notify={notify} />}{action?.type === 'slot' && <SlotEditorModal slot={action.slot} regionOptions={regionOptions} teacherId={teacherId} close={() => setAction(null)} reload={reload} notify={notify} />}{action?.type === 'booking' && <BookingActionModal booking={action.booking} slot={action.slot} teacherId={teacherId} close={() => setAction(null)} cancel={cancel} reload={reload} notify={notify} />}</div>
 }
 
 function DirectStudentBookingModal({ target, regionOptions, teacherId, close, reload, notify }: { target: DirectBookingTarget; regionOptions: string[]; teacherId: string; close: () => void; reload: () => Promise<void>; notify: (message: string) => void }) {
@@ -595,20 +595,90 @@ function BookingActionModal({ booking, slot, teacherId, close, cancel, reload, n
   return <div className="modal-backdrop"><div className="modal booking-action-modal"><button type="button" className="modal-close" onClick={close}><X /></button><div className="eyebrow">BOOKING DETAILS</div><h2>{booking.studentName}</h2><div className="student-review-grid"><span><b>年級</b>{booking.studentGrade || '—'}</span><span><b>學校</b>{booking.studentSchool || '—'}</span><span><b>電話</b>{booking.studentPhone || '—'}</span><span><b>地區</b>{booking.region}</span><span className="student-review-wide"><b>上課地址</b>{booking.studentLocation || '—'}</span><span className="student-review-wide"><b>加強項目</b>{booking.studentFocus || '—'}</span></div><div className="booking-time-editor"><b>修改學生上課時間</b><div className="form-grid two"><Field label="開始"><TimePicker value={start} options={available.filter((time) => toMinutes(time) < toMinutes(end))} onChange={setStart} /></Field><Field label="結束"><TimePicker value={end} options={available.filter((time) => toMinutes(time) > toMinutes(start))} onChange={setEnd} /></Field></div>{!valid && <small className="field-error">開始與結束時間必須落在同一段空檔內</small>}</div><div className="modal-actions"><button type="button" className="text-button danger delete-action" onClick={() => void cancel(booking)}><Trash2 size={15} /> 刪除預約</button><button type="button" className="button quiet" onClick={close}>關閉</button><button type="button" className="button primary" disabled={saving || !valid} onClick={() => void save}>{saving ? '儲存中…' : '儲存時間修改'}</button></div></div></div>
 }
 
-function WeeklyTimetableV2({ slots, onLongPress, onSlotClick, onBookingClick }: { slots: AvailabilitySlot[]; onLongPress: (weekday: Weekday, start: string) => void; onSlotClick: (slot: AvailabilitySlot) => void; onBookingClick: (booking: Booking, slot: AvailabilitySlot) => void }) {
+const timetableStudentHues = [0, 28, 213, 151, 271, 333, 180, 52, 245, 103, 302]
+
+function WeeklyTimetableV2({ slots, students, onLongPress, onSlotClick, onBookingClick }: {
+  slots: AvailabilitySlot[]
+  students: Student[]
+  onLongPress: (weekday: Weekday, start: string) => void
+  onSlotClick: (slot: AvailabilitySlot) => void
+  onBookingClick: (booking: Booking, slot: AvailabilitySlot) => void
+}) {
   const firstHour = 8
   const hours = Array.from({ length: 14 }, (_, index) => firstHour + index)
   const pressTimer = useRef<number | null>(null)
   const slotLongPressFired = useRef(false)
   const minutes = (value: string) => toMinutes(value)
   const eventStyle = (start: string, end: string) => ({ '--event-offset': (minutes(start) - firstHour * 60) / 60, '--event-duration': (minutes(end) - minutes(start)) / 60 } as CSSProperties)
-  const durationClass = (start: string, end: string) => { const duration = (minutes(end) - minutes(start)) / 60; return duration <= 1 ? 'duration-one' : duration <= 2 ? 'duration-two' : duration <= 3 ? 'duration-three' : 'duration-long' }
+  const studentsByCreation = [...students].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id))
+  const studentHues = new Map(studentsByCreation.map((student, index) => [
+    student.id, timetableStudentHues[index] ?? (index * 137.508) % 360,
+  ]))
   const clearPress = () => { if (pressTimer.current !== null) { window.clearTimeout(pressTimer.current); pressTimer.current = null } }
   const startPress = (weekday: Weekday, hour: number) => { clearPress(); pressTimer.current = window.setTimeout(() => { onLongPress(weekday, `${String(hour).padStart(2, '0')}:00`); pressTimer.current = null }, 800) }
-  const bookingEvent = (booking: Booking, slot: AvailabilitySlot) => <div className={`timetable-event ${durationClass(booking.start, booking.end)} timetable-booking`} style={eventStyle(booking.start, booking.end)} key={booking.id} role="button" tabIndex={0} title="點按編輯預約" onClick={() => onBookingClick(booking, slot)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onBookingClick(booking, slot) }}><b>{booking.studentName}</b><small>{booking.start}–{booking.end} · {booking.region}</small></div>
+  const bookingEvent = (booking: Booking, slot: AvailabilitySlot) => {
+    const style = { ...eventStyle(booking.start, booking.end), '--student-hue': studentHues.get(booking.studentId) } as CSSProperties
+    return <div className="timetable-event timetable-booking student-timetable-event"
+      style={style}
+      key={booking.id}
+      role="button"
+      tabIndex={0}
+      title={`${booking.studentName} ${booking.start}–${booking.end}`}
+      onClick={() => onBookingClick(booking, slot)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onBookingClick(booking, slot)
+        }
+      }}
+    >
+      <b>{booking.studentName}</b>
+      <small>{booking.start}–{booking.end} · {booking.region}</small>
+    </div>
+  }
   const startSlotPress = (slot: AvailabilitySlot) => { clearPress(); pressTimer.current = window.setTimeout(() => { slotLongPressFired.current = true; onLongPress(slot.weekday, slot.start); pressTimer.current = null }, 800) }
   const slotClickProps = (slot: AvailabilitySlot) => ({ role: 'button' as const, tabIndex: 0, onPointerDown: () => startSlotPress(slot), onPointerUp: clearPress, onPointerLeave: clearPress, onPointerCancel: clearPress, onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => event.preventDefault(), onClick: () => { if (slotLongPressFired.current) { slotLongPressFired.current = false; return } onSlotClick(slot) }, onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => { if (event.key === 'Enter' || event.key === ' ') onSlotClick(slot) } })
-  return <div className="timetable-panel"><div className="timetable-heading"><div><span className="eyebrow">TERM TIMETABLE</span><h3>學生固定星期課表</h3><p>搶課結束後長按空堂新增學生；點按區塊編輯時段。</p></div><div className="timetable-legend"><span><i className="legend-dot duration-one" />1 小時</span><span><i className="legend-dot duration-two" />2 小時</span><span><i className="legend-dot duration-three" />3 小時以上</span></div></div><div className="timetable-grid"><div className="time-axis"><div className="time-axis-spacer" />{hours.map((hour) => <div className="time-label" key={hour}>{String(hour).padStart(2, '0')}:00</div>)}</div>{(Object.entries(weekdayLabels) as Array<[string, string]>).map(([value, label]) => { const weekday = Number(value) as Weekday; const daySlots = slots.filter((slot) => slot.weekday === weekday); return <div className="day-column" key={value}><div className="day-heading">{label.replace('星期', '')}</div>{hours.map((hour) => <div className="hour-cell" key={hour} onPointerDown={() => startPress(weekday, hour)} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => event.preventDefault()} aria-label={`${label} ${hour}:00 空白格`} />)}{daySlots.flatMap((slot) => [...slot.bookings.map((booking) => bookingEvent(booking, slot)), ...freeSegmentsForSlot(slot).map((segment) => <div className="timetable-open timetable-clickable" style={eventStyle(segment.start, segment.end)} key={`${slot.id}-${segment.start}-${segment.end}`} {...slotClickProps(slot)}><b>可預約空堂</b><small>{segment.start}–{segment.end}{slot.presetRegion ? ` · ${slot.presetRegion}` : ''}</small></div>)])}</div>})}</div></div>
+  return <div className="timetable-panel">
+    <div className="timetable-heading">
+      <div>
+        <span className="eyebrow">TERM TIMETABLE</span>
+        <h3>學生固定星期課表</h3>
+        <p>同一位學生使用同一種顏色。點選區塊可編輯預約。</p>
+      </div>
+    </div>
+    <div className="timetable-grid">
+      <div className="time-axis">
+        <div className="time-axis-spacer" />
+        {hours.map((hour) => <div className="time-label" key={hour}>{padNumber(hour)}:00</div>)}
+      </div>
+      {(Object.entries(weekdayLabels) as Array<[string, string]>).map(([value, label]) => {
+        const weekday = Number(value) as Weekday
+        const daySlots = slots.filter((slot) => slot.weekday === weekday)
+        return <div className="day-column" key={value}>
+          <div className="day-heading">{label.replace('星期', '')}</div>
+          {hours.map((hour) => <div className="hour-cell" key={hour}
+            onPointerDown={() => startPress(weekday, hour)}
+            onPointerUp={clearPress}
+            onPointerLeave={clearPress}
+            onPointerCancel={clearPress}
+            onContextMenu={(event) => event.preventDefault()}
+            aria-label={`${label} ${hour}:00 空白格`}
+          />)}
+          {daySlots.flatMap((slot) => [
+            ...slot.bookings.map((booking) => bookingEvent(booking, slot)),
+            ...freeSegmentsForSlot(slot).map((segment) => <div className="timetable-open timetable-clickable"
+              style={eventStyle(segment.start, segment.end)}
+              key={`${slot.id}-${segment.start}-${segment.end}`}
+              {...slotClickProps(slot)}
+            >
+              <b>可預約空堂</b>
+              <small>{segment.start}–{segment.end}{slot.presetRegion ? ` · ${slot.presetRegion}` : ''}</small>
+            </div>),
+          ])}
+        </div>
+      })}
+    </div>
+  </div>
 }
 
 const settingsSections = [

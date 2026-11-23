@@ -282,6 +282,11 @@ footer { margin-top:auto; padding:25px 5.5vw; display:flex; justify-content:spac
 .managed-tag.editing { padding:3px 6px; }
 .managed-tag.editing input { width:86px; border:0; border-bottom:1px solid #8fc5b4; background:transparent; color:inherit; outline:0; font-size:11px; }
 .timetable-booking { cursor:pointer; }
+.student-timetable-event {
+  background:hsl(var(--student-hue, 172) 85% 91%);
+  border-color:hsl(var(--student-hue, 172) 58% 52%);
+  color:hsl(var(--student-hue, 172) 55% 24%);
+}
 .timetable-booking:hover { filter:brightness(.97); transform:translateY(-1px); }
 .timetable-closed { position:absolute; top:calc(42px + var(--event-offset) * 58px); height:max(26px, calc(var(--event-duration) * 58px)); left:5px; right:5px; z-index:2; border-radius:6px; padding:7px; overflow:hidden; border-left:4px solid #b8c0ba; background:#eef0ed; color:#8b9790; opacity:.8; }
 .timetable-closed b,.timetable-closed small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
