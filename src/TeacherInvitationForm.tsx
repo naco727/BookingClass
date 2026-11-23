@@ -4,6 +4,7 @@ import { Check, Mail } from 'lucide-react'
 import { supabase } from './supabase'
 
 type Result = { email: string; outcome: 'sent' | 'authorized' | 'already_authorized' }
+const expiredSessionMessage = '登入已失效，請登出後重新登入，再寄送邀請。'
 
 const resultMessages: Record<Result['outcome'], string> = {
   sent: '邀請信已寄出，老師權限已開通。請老師從邀請信設定密碼。',
@@ -25,13 +26,28 @@ export function TeacherInvitationForm() {
     setMessage('')
     setResult(null)
     try {
-      const { data, error } = await supabase.functions.invoke<Result>('invite-teacher', { body: { email: email.trim() } })
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (sessionError || !token) {
+        setCanSubmit(false)
+        setMessage(expiredSessionMessage)
+        return
+      }
+
+      const { data, error } = await supabase.functions.invoke<Result>('invite-teacher', {
+        headers: { Authorization: `Bearer ${token}` },
+        body: { email: email.trim() },
+      })
       if (error) {
         const response = error.context
+        if (response?.status === 401) {
+          setCanSubmit(false)
+          setMessage(expiredSessionMessage)
+          return
+        }
         const body = response instanceof Response ? await response.json().catch(() => null) : null
-        if (response?.status === 401 || response?.status === 403) setCanSubmit(false)
-        if (response?.status === 401) setMessage('登入已失效，請重新登入。')
-        else setMessage(typeof body?.message === 'string' ? body.message : '無法寄送邀請，請稍後再試。')
+        if (response?.status === 403) setCanSubmit(false)
+        setMessage(typeof body?.message === 'string' ? body.message : '無法寄送邀請，請稍後再試。')
         return
       }
       if (!data) throw new Error('Missing invitation response')
