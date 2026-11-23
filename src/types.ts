@@ -4,8 +4,15 @@ export type Region = string
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6
 export type RegistrationStatus = 'pending' | 'approved' | 'rejected'
 export type MaterialPlan = '自編' | '已有' | '購買市售'
+export type ContactMethod = 'official_line' | 'personal_line' | 'messenger' | 'phone'
 
-export type Registration = {
+export type ContactDetails = {
+  contactMethod?: ContactMethod
+  contactName?: string | null
+  phone: string | null
+}
+
+export type Registration = ContactDetails & {
   id: string
   teacherId: string
   createdAt: string
@@ -15,12 +22,11 @@ export type Registration = {
   school: string
   focus: string
   location: string
-  phone: string
   material: MaterialPlan
   note?: string
 }
 
-export type Student = {
+export type Student = ContactDetails & {
   id: string
   teacherId: string
   registrationId?: string
@@ -29,7 +35,6 @@ export type Student = {
   school: string
   focus: string
   location: string
-  phone: string
   material: MaterialPlan
   region: Region | null
   tags: string[]
@@ -37,7 +42,7 @@ export type Student = {
   createdAt: string
 }
 
-export type StudentProfileInput = Pick<Student, 'name' | 'grade' | 'school' | 'focus' | 'location' | 'phone' | 'material' | 'region'>
+export type StudentProfileInput = Pick<Student, 'name' | 'grade' | 'school' | 'focus' | 'location' | 'material' | 'region'> & ContactDetails
 
 export type Booking = {
   id: string
@@ -54,7 +59,9 @@ export type Booking = {
   studentSchool?: string
   studentFocus?: string
   studentLocation?: string
-  studentPhone?: string
+  studentPhone?: string | null
+  studentContactMethod?: ContactMethod
+  studentContactName?: string | null
 }
 
 export type AvailabilitySlot = {
@@ -79,8 +86,12 @@ export type BookingSelection = {
 export type PublicStudent = {
   id: string
   name: string
-  phoneSuffix: string
   region: Region
+}
+
+export type StudentLookupResult = {
+  students: PublicStudent[]
+  needsContact: boolean
 }
 
 export type PublicAvailability = Omit<AvailabilitySlot, 'bookings'> & {

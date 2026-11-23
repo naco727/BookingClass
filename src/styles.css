@@ -664,6 +664,21 @@ body:has(.picker-dialog[open]) { overflow:hidden; }
 .slot-control select { min-width:0; }
 .slot-connector { color:#79908a; font-size:11px; }
 
+.contact-fields { min-width:0; padding:0; border:0; margin:14px 0 18px; }
+.contact-fields legend { padding:0; margin-bottom:8px; color:#5b706a; font-size:12px; font-weight:700; }
+.contact-fields legend span { color:#e17d60; }
+.contact-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+.contact-option {
+  display:flex; align-items:center; gap:7px; min-width:0; min-height:42px;
+  padding:8px; border:1px solid #dfe5de; border-radius:8px;
+  background:#fbfcf9; color:var(--ink); font-size:12px; cursor:pointer;
+}
+.contact-option input { flex:none; margin:0; accent-color:#438877; }
+.contact-option:has(input:checked) { background:#eaf5ef; border-color:#8dbfaf; }
+.contact-fields > .field, .student-editor-modal .contact-fields > .field { margin-top:11px; }
+.booking-page .contact-lookup-form { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; }
+.lookup-fields { display:grid; gap:11px; min-width:0; }
+
 .settings-layout { max-width:720px; }
 .settings-tabs {
   display:grid;
@@ -706,6 +721,7 @@ body:has(.picker-dialog[open]) { overflow:hidden; }
   .lookup-card { width:100%; margin:10px auto 40px; padding:24px 16px; border-radius:14px; }
   .lookup-card h2 { font-size:20px; }
   .lookup-form { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; }
+  .booking-page .contact-lookup-form { grid-template-columns:minmax(0,1fr); }
   .lookup-form input,
   .lookup-form .button { box-sizing:border-box; width:100%; min-height:44px; }
   .match-list { margin-top:20px; padding-top:14px; }

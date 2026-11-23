@@ -1,6 +1,6 @@
 import { supabase } from './supabase.ts'
 import { demoBookings, demoRegistrations, demoSettings, demoSlots, demoStudents, demoTeachers } from './mockData.ts'
-import type { AvailabilitySlot, Booking, BookingSelection, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, StudentProfileInput, TeacherProfile, TeacherSession } from './types.ts'
+import type { AvailabilitySlot, Booking, BookingSelection, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, StudentLookupResult, StudentProfileInput, TeacherProfile, TeacherSession } from './types.ts'
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
 const mockStorageKey = 'between-classes-mock-v3'
@@ -40,7 +40,7 @@ const fromMinutes = (minutes: number) => `${String(Math.floor(minutes / 60)).pad
 const within = (value: string, start: string, end: string) => toMinutes(value) >= toMinutes(start) && toMinutes(value) <= toMinutes(end)
 
 function attachBookings(slot: AvailabilitySlot): AvailabilitySlot {
-  const bookings = db.bookings.filter((b) => b.slotId === slot.id && b.status === 'confirmed').map((booking) => { const student = db.students.find((item) => item.id === booking.studentId); return { ...booking, studentGrade: student?.grade, studentSchool: student?.school, studentFocus: student?.focus, studentLocation: student?.location, studentPhone: student?.phone } })
+  const bookings = db.bookings.filter((b) => b.slotId === slot.id && b.status === 'confirmed').map((booking) => { const student = db.students.find((item) => item.id === booking.studentId); return { ...booking, studentGrade: student?.grade, studentSchool: student?.school, studentFocus: student?.focus, studentLocation: student?.location, studentPhone: student?.phone, studentContactMethod: student?.contactMethod, studentContactName: student?.contactName } })
   return { ...slot, dynamicRegion: slot.presetRegion ? null : bookings[0]?.region ?? slot.dynamicRegion ?? null, bookings }
 }
 
@@ -63,10 +63,15 @@ function availableSegments(slot: AvailabilitySlot, studentRegion?: Region): Publ
   return { ...safeSlot, segments: bookableSegments, effectiveRegion }
 }
 
-const publicStudent = (student: Student): PublicStudent => ({ id: student.id, name: student.name, phoneSuffix: student.phone.replace(/\D/g, '').slice(-3), region: student.region! })
-const normalizeRegistration = (row: any): Registration => ({ ...row, teacherId: row.teacherId ?? row.teacher_id, createdAt: row.createdAt ?? row.created_at })
-const normalizeStudent = (row: any): Student => ({ ...row, teacherId: row.teacherId ?? row.teacher_id, createdAt: row.createdAt ?? row.created_at, registrationId: row.registrationId ?? row.registration_id, tags: row.tags ?? [] })
-const normalizeBooking = (row: any): Booking => ({ ...row, teacherId: row.teacherId ?? row.teacher_id, slotId: row.slotId ?? row.slot_id, studentId: row.studentId ?? row.student_id, start: row.start ?? row.start_time?.slice(0, 5), end: row.end ?? row.end_time?.slice(0, 5), studentName: row.studentName ?? row.students?.name ?? '', studentGrade: row.studentGrade ?? row.students?.grade, studentSchool: row.studentSchool ?? row.students?.school, studentFocus: row.studentFocus ?? row.students?.focus, studentLocation: row.studentLocation ?? row.students?.location, studentPhone: row.studentPhone ?? row.students?.phone })
+const publicStudent = (student: Student): PublicStudent => ({ id: student.id, name: student.name, region: student.region! })
+const normalizeContact = (row: any) => ({
+  phone: row.phone ?? null,
+  contactMethod: row.contactMethod ?? row.contact_method ?? 'phone',
+  contactName: row.contactName ?? row.contact_name ?? null,
+})
+const normalizeRegistration = (row: any): Registration => ({ ...row, ...normalizeContact(row), teacherId: row.teacherId ?? row.teacher_id, createdAt: row.createdAt ?? row.created_at })
+const normalizeStudent = (row: any): Student => ({ ...row, ...normalizeContact(row), teacherId: row.teacherId ?? row.teacher_id, createdAt: row.createdAt ?? row.created_at, registrationId: row.registrationId ?? row.registration_id, tags: row.tags ?? [] })
+const normalizeBooking = (row: any): Booking => ({ ...row, teacherId: row.teacherId ?? row.teacher_id, slotId: row.slotId ?? row.slot_id, studentId: row.studentId ?? row.student_id, start: row.start ?? row.start_time?.slice(0, 5), end: row.end ?? row.end_time?.slice(0, 5), studentName: row.studentName ?? row.students?.name ?? '', studentGrade: row.studentGrade ?? row.students?.grade, studentSchool: row.studentSchool ?? row.students?.school, studentFocus: row.studentFocus ?? row.students?.focus, studentLocation: row.studentLocation ?? row.students?.location, studentPhone: row.studentPhone ?? row.students?.phone, studentContactMethod: row.studentContactMethod ?? row.students?.contact_method, studentContactName: row.studentContactName ?? row.students?.contact_name })
 const normalizeSlot = (row: any): AvailabilitySlot => ({ ...row, teacherId: row.teacherId ?? row.teacher_id, weekday: row.weekday ?? row.day_of_week, start: row.start ?? row.start_time?.slice(0, 5), end: row.end ?? row.end_time?.slice(0, 5), presetRegion: row.presetRegion ?? row.preset_region ?? null, dynamicRegion: row.dynamicRegion ?? row.bookings?.find((item: any) => item.status === 'confirmed')?.region ?? null, bookings: (row.bookings ?? []).filter((item: any) => item.status === 'confirmed').map(normalizeBooking) })
 const normalizeSettings = (row: any): Settings => ({ teacherId: row.teacherId ?? row.teacher_id, bookingOpen: row.bookingOpen ?? row.booking_open, bookingClose: row.bookingClose ?? row.booking_close, tagOptions: row.tagOptions ?? row.tag_options ?? [] })
 
@@ -94,6 +99,8 @@ export async function submitRegistration(input: Omit<Registration, 'id' | 'teach
       p_phone: input.phone,
       p_material: input.material,
       p_note: input.note ?? null,
+      p_contact_method: input.contactMethod ?? 'phone',
+      p_contact_name: input.contactName ?? null,
     }).single<{ registration_id: string; submitted_at: string }>()
     if (error?.message === 'registration_unavailable') throw new Error('此老師目前未開放新生登記，請確認連結或聯絡老師。')
     if (error && ['23514', '23502', '22P02'].includes(error.code)) throw new Error('請確認必填欄位都已填寫，並縮短過長的內容。')
@@ -136,7 +143,7 @@ export async function approveRegistration(id: string, teacherId: string): Promis
   const registration = db.registrations.find((item) => item.id === id && item.teacherId === teacherId)
   if (!registration) throw new Error('找不到這筆登記')
   registration.status = 'approved'
-  const student: Student = { id: `stu-${Date.now()}`, teacherId, registrationId: registration.id, name: registration.name, grade: registration.grade, school: registration.school, focus: registration.focus, location: registration.location, phone: registration.phone, material: registration.material, region: null, tags: [], active: true, createdAt: new Date().toISOString() }
+  const student: Student = { id: `stu-${Date.now()}`, teacherId, registrationId: registration.id, name: registration.name, grade: registration.grade, school: registration.school, focus: registration.focus, location: registration.location, phone: registration.phone, contactMethod: registration.contactMethod, contactName: registration.contactName, material: registration.material, region: null, tags: [], active: true, createdAt: new Date().toISOString() }
   db.students.unshift(student)
   persistMock()
   return clone(student)
@@ -163,6 +170,8 @@ export async function teacherAddStudent(profile: StudentProfileInput, teacherId:
       p_phone: profile.phone,
       p_material: profile.material,
       p_region: profile.region,
+      p_contact_method: profile.contactMethod ?? 'phone',
+      p_contact_name: profile.contactName ?? null,
     })
     if (error?.code === '42501') throw new Error('僅限啟用的老師帳號新增學生，請確認登入狀態。')
     if (error?.message === 'invalid_student_region') throw new Error('這個地點標籤已無法使用，請更新後重新選擇。')
@@ -192,6 +201,8 @@ export async function updateStudent(id: string, patch: Partial<Student>, teacher
       ...(studentPatch.focus !== undefined ? { focus: studentPatch.focus } : {}),
       ...(studentPatch.location !== undefined ? { location: studentPatch.location } : {}),
       ...(studentPatch.phone !== undefined ? { phone: studentPatch.phone } : {}),
+      ...(studentPatch.contactMethod !== undefined ? { contact_method: studentPatch.contactMethod } : {}),
+      ...(studentPatch.contactName !== undefined ? { contact_name: studentPatch.contactName } : {}),
       ...(studentPatch.material !== undefined ? { material: studentPatch.material } : {}),
       ...(studentPatch.region !== undefined ? { region: studentPatch.region } : {}),
     }
@@ -206,13 +217,27 @@ export async function updateStudent(id: string, patch: Partial<Student>, teacher
   return clone(student)
 }
 
-export async function lookupStudents(name: string, teacherId: string): Promise<PublicStudent[]> {
+export async function lookupStudents(name: string, teacherId: string, contactConfirmation?: string): Promise<StudentLookupResult> {
   if (supabase) {
-    const { data, error } = await supabase.rpc('public_lookup_students', { p_name: name, p_teacher_id: teacherId })
+    const { data, error } = await supabase.rpc('public_lookup_students', {
+      p_name: name,
+      p_teacher_id: teacherId,
+      p_contact_confirmation: contactConfirmation ?? null,
+    })
     if (error) throw error
-    return (data ?? []) as PublicStudent[]
+    const rows = (data ?? []) as Array<PublicStudent | { needs_contact: true }>
+    return {
+      students: rows.filter((row): row is PublicStudent => 'id' in row && Boolean(row.id))
+        .map(({ id, name, region }) => ({ id, name, region })),
+      needsContact: rows.some((row) => 'needs_contact' in row && row.needs_contact),
+    }
   }
-  return db.students.filter((student) => student.teacherId === teacherId && student.active && student.region && student.name.trim() === name.trim()).map(publicStudent)
+  const candidates = db.students.filter((student) => student.teacherId === teacherId && student.active && student.region && student.name.trim() === name.trim())
+  const confirmation = contactConfirmation?.trim()
+  const confirmed = confirmation ? candidates.filter((student) => (student.contactMethod ?? 'phone') === 'phone'
+    ? /^[0-9]{3}$/.test(confirmation) && student.phone?.replace(/\D/g, '').slice(-3) === confirmation
+    : student.contactName?.trim().toLowerCase() === confirmation.toLowerCase()) : candidates
+  return { students: confirmed.length === 1 ? confirmed.map(publicStudent) : [], needsContact: candidates.length > 1 && confirmed.length !== 1 }
 }
 
 export async function getParentAvailability(studentId: string, teacherId: string): Promise<PublicAvailability[]> {
@@ -275,7 +300,7 @@ export async function bookSelections(studentId: string, selections: BookingSelec
 
 export async function listSlots(teacherId: string): Promise<AvailabilitySlot[]> {
   if (supabase) {
-    const { data, error } = await supabase.from('availability_slots').select('*, bookings(*, students(name, grade, school, focus, location, phone))').eq('teacher_id', teacherId).order('weekday').order('start_time')
+    const { data, error } = await supabase.from('availability_slots').select('*, bookings(*, students(name, grade, school, focus, location, phone, contact_method, contact_name))').eq('teacher_id', teacherId).order('weekday').order('start_time')
     if (error) throw error
     return (data ?? []).map(normalizeSlot)
   }

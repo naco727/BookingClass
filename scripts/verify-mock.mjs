@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { bookSelections, getParentAvailability, getPublicTeacher, getSettings, lookupStudents, saveSettings, teacherBookExistingStudent, updateBooking } from '../src/services.ts'
+import { approveRegistration, bookSelections, getParentAvailability, getPublicTeacher, getSettings, lookupStudents, saveSettings, submitRegistration, teacherAddStudent, teacherBookExistingStudent, updateBooking, updateStudent } from '../src/services.ts'
 
 const teacherA = await getPublicTeacher('lin')
 const teacherB = await getPublicTeacher('chen')
@@ -7,9 +7,21 @@ assert.equal(teacherA?.id, 'teacher-a', 'A 老師專屬 slug 應可解析')
 assert.equal(teacherB?.id, 'teacher-b', 'B 老師專屬 slug 應可解析')
 
 const sameName = await lookupStudents('陳昀安', 'teacher-a')
-assert.equal(sameName.length, 2, '同名學生應有兩筆可供末三碼辨識')
-assert.deepEqual(sameName.map((student) => student.region).sort(), ['北投', '天母'])
-assert.ok(sameName.every((student) => !('phone' in student) && !('school' in student)), '公開查詢不得回傳聯絡資料或學校')
+assert.deepEqual(sameName, { students: [], needsContact: true }, '同名時必須先確認聯絡資料')
+const verified = await lookupStudents('陳昀安', 'teacher-a', '333')
+assert.deepEqual(verified.students, [{ id: 'stu-001', name: '陳昀安', region: '天母' }], '公開查詢只回傳確認後的最小資料')
+
+const profile = { name: '聯絡方式測試', grade: '小六', school: '測試國小', focus: '數學', location: '測試地址', material: '已有' }
+const receipt = await submitRegistration({ ...profile, phone: null, contactMethod: 'official_line', contactName: '官方名稱' }, 'teacher-a')
+const approved = await approveRegistration(receipt.id, 'teacher-a')
+assert.equal(approved.contactMethod, 'official_line')
+assert.equal(approved.contactName, '官方名稱')
+await updateStudent(approved.id, { region: '天母' }, 'teacher-a')
+const existingId = await teacherAddStudent({ ...profile, phone: null, contactMethod: 'messenger', contactName: '訊息名稱', region: '天母' }, 'teacher-a')
+assert.deepEqual(await lookupStudents(profile.name, 'teacher-a', '錯誤名稱'), { students: [], needsContact: true })
+assert.deepEqual((await lookupStudents(profile.name, 'teacher-a', '訊息名稱')).students, [{ id: existingId, name: profile.name, region: '天母' }])
+await updateStudent(existingId, { phone: '0911222888', contactMethod: 'phone', contactName: null }, 'teacher-a')
+assert.equal((await lookupStudents(profile.name, 'teacher-a', '888')).students[0]?.id, existingId)
 
 const tianmu = await getParentAvailability('stu-001', 'teacher-a')
 const tianmuSlot = tianmu.find((slot) => slot.id === 'slot-001')
@@ -42,7 +54,7 @@ assert.equal(race.filter((result) => result.rejected.length === 1).length, 1, '�
 
 const settings = await getSettings('teacher-a')
 assert.ok(settings.tagOptions.includes('天母') && settings.tagOptions.includes('北投') && settings.tagOptions.includes('士林'), '老師應有可管理的地區選項')
-assert.equal((await lookupStudents('陳昀安', 'teacher-b')).length, 0, 'B 老師不得看到 A 老師學生')
+assert.deepEqual(await lookupStudents('陳昀安', 'teacher-b', '333'), { students: [], needsContact: false }, 'B 老師不得看到 A 老師學生')
 await saveSettings({ ...settings, bookingClose: new Date(Date.now() - 1000).toISOString() }, 'teacher-a')
 const teacherAdded = await teacherBookExistingStudent('stu-003', 'slot-001', '12:00', '13:00', 'teacher-a')
 assert.equal(teacherAdded.studentId, 'stu-003', '搶課結束後老師只能替正式學生新增預約')

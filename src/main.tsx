@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useRef, useState } from 'react'
+import { StrictMode, useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
@@ -6,7 +6,7 @@ import { CalendarDays, Check, ChevronRight, Clock3, Copy, DoorOpen, GraduationCa
 import './styles.css'
 import { supabase } from './supabase'
 import { addSlot, approveRegistration, bookSelections, cancelBooking, deleteRegistration, deleteSlot, deleteStudent, getCurrentTeacherSession, getParentAvailability, getPublicBookingStatus, getPublicTeacher, getSettings, getTeacherAvailability, listRegistrations, listSlots, listStudents, lookupStudents, renameLocationLabel, saveSettings, submitRegistration, teacherAddStudent, teacherBookExistingStudent, teacherCreateBooking, teacherSignIn, teacherSignOut, updateBooking, updateSlot, updateStudent, updateTeacherPassword, updateTeacherProfile } from './services'
-import type { AvailabilitySlot, Booking, BookingSelection, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, TeacherProfile, TeacherSession, Weekday } from './types'
+import type { AvailabilitySlot, Booking, BookingSelection, ContactDetails, ContactMethod, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, TeacherProfile, TeacherSession, Weekday } from './types'
 
 type View = 'home' | 'register' | 'book' | 'teacher'
 const navItems: Array<{ id: View; label: string }> = [{ id: 'home', label: '首頁' }, { id: 'register', label: '新生登記' }, { id: 'book', label: '家長選課' }, { id: 'teacher', label: '老師後台' }]
@@ -83,18 +83,61 @@ function Home({ onNavigate }: { onNavigate: (view: View) => void }) {
 }
 function Feature({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) { return <div className="feature-card"><div className="icon-box">{icon}</div><h3>{title}</h3><p>{text}</p></div> }
 
+const contactLabels: Record<ContactMethod, string> = {
+  official_line: '官方 LINE',
+  personal_line: '私人 LINE',
+  messenger: 'Messenger',
+  phone: '電話',
+}
+type ContactDraft = { method: ContactMethod | ''; value: string }
+
+function filledContact({ method, value }: ContactDraft): ContactDetails | null {
+  const detail = value.trim()
+  if (!method || !detail) return null
+  return {
+    contactMethod: method,
+    phone: method === 'phone' ? detail : null,
+    contactName: method === 'phone' ? null : detail,
+  }
+}
+
+function displayContact({ contactMethod = 'phone', phone, contactName }: ContactDetails) {
+  const detail = contactMethod === 'phone' ? phone : contactName
+  return detail ? `${contactLabels[contactMethod]} · ${detail}` : '—'
+}
+
+function ContactFields({ contact, onChange }: { contact: ContactDraft; onChange: (contact: ContactDraft) => void }) {
+  const radioName = useId()
+  const isPhone = contact.method === 'phone'
+  return <fieldset className="contact-fields">
+    <legend>家長聯絡方式 <span aria-hidden="true">*</span></legend>
+    <div className="contact-options">
+      {(Object.entries(contactLabels) as Array<[ContactMethod, string]>).map(([method, label]) => <label className="contact-option" key={method}>
+        <input type="radio" name={radioName} value={method} required checked={contact.method === method} onChange={() => onChange({ method, value: '' })} />
+        {label}
+      </label>)}
+    </div>
+    {contact.method && <Field label={isPhone ? '電話號碼' : '聯絡名稱'} required>
+      <input type={isPhone ? 'tel' : 'text'} required maxLength={isPhone ? 40 : 80} value={contact.value} autoComplete={isPhone ? 'tel' : 'off'} onChange={(event) => onChange({ ...contact, value: event.target.value })} />
+    </Field>}
+  </fieldset>
+}
+
 function RegistrationPage({ notify, teacher }: { notify: (message: string) => void; teacher: TeacherProfile | null }) {
   const [submittedAt, setSubmittedAt] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({ name: '', grade: '', school: '', focus: '', location: '', phone: '', material: '自編' as const, note: '' })
+  const [form, setForm] = useState({ name: '', grade: '', school: '', focus: '', location: '', material: '自編' as const, note: '' })
+  const [contact, setContact] = useState<ContactDraft>({ method: '', value: '' })
   const update = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }))
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (loading) return
+    const details = filledContact(contact)
+    if (!details) { notify('請選擇聯絡方式並填寫聯絡資料。'); return }
     setLoading(true)
     try {
-      const receipt = await submitRegistration(form, teacher?.id ?? 'teacher-a')
+      const receipt = await submitRegistration({ ...form, ...details }, teacher?.id ?? 'teacher-a')
       setSubmittedAt(receipt.createdAt)
       notify('已送出新生登記')
     } catch (error) {
@@ -105,7 +148,7 @@ function RegistrationPage({ notify, teacher }: { notify: (message: string) => vo
   }
   const copyReminder = async () => { const message = `老師好，我已完成新生登記。再麻煩確認謝謝。\n學生姓名：${form.name}`; await navigator.clipboard?.writeText(message); setCopied(true); notify('提醒文字已複製，可貼到 LINE 傳給老師') }
   if (submittedAt) return <div className="page-width centered-page"><div className="success-card"><div className="success-icon"><Check /></div><div className="eyebrow">REGISTRATION RECEIVED</div><h1>資料已收到，<br /><em>接下來交給老師。</em></h1><p>已記錄學生資訊，請等候老師審核與回覆。<br />老師完成建檔後，會再通知您開始選課。</p><div className="receipt"><span>登記時間</span><b>{formatTimestamp(submittedAt)}</b></div><div className="reminder-card"><div><b>傳給老師做提醒</b><small>複製後貼到 LINE 或訊息中</small></div><button className="copy-message-button" onClick={copyReminder}>{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? '已複製' : '複製提醒文字'}</button><pre>老師好，我已完成新生登記。再麻煩確認謝謝。{`\n`}學生姓名：{form.name}</pre></div><button className="button primary" onClick={() => { setSubmittedAt(null); setCopied(false) }}>再登記一位學生</button></div></div>
-  return <div className="page-width form-page"><div className="page-heading"><div><div className="eyebrow">NEW STUDENT / 01</div><h1>先讓我們認識<br /><em>你的孩子。</em></h1></div><p>填寫後送出，老師會在確認學生資訊與地區後，建立正式檔案。</p></div><form className="form-card" onSubmit={onSubmit}><div className="form-section"><div className="section-number">01</div><div className="form-section-content"><h2>學生基本資料</h2><p className="helper">這些資訊只會提供給老師查看。</p><div className="form-grid two"><Field label="學生姓名" required><input required value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="例如：陳昀安" /></Field><Field label="年級" required><select required value={form.grade} onChange={(e) => update('grade', e.target.value)}><option value="">請選擇年級</option>{['小一','小二','小三','小四','小五','小六','國一','國二','國三','高一','高二','高三'].map((grade) => <option key={grade}>{grade}</option>)}</select></Field></div><div className="form-grid two"><Field label="學校" required><input required value={form.school} onChange={(e) => update('school', e.target.value)} placeholder="例如：蘭雅國中" /></Field><Field label="欲加強項目" required><input required value={form.focus} onChange={(e) => update('focus', e.target.value)} placeholder="例如：數學、理化" /></Field></div></div></div><div className="form-section"><div className="section-number">02</div><div className="form-section-content"><h2>上課與聯絡</h2><p className="helper">請填寫完整上課地址（不用填樓層）；地區會由老師審核後標記。</p><div className="form-grid two"><Field label="詳盡地址（無須樓層）" required><input required value={form.location} onChange={(e) => update('location', e.target.value)} placeholder="例如：台北市士林區中山北路六段 123 號" /></Field><Field label="家長聯絡電話" required><input required type="tel" value={form.phone} onChange={(e) => update('phone', e.target.value)} placeholder="0912-345-678" /></Field></div><Field label="講義安排" required><div className="choice-row">{(['自編','已有','購買市售'] as const).map((item) => <label className={form.material === item ? 'choice selected' : 'choice'} key={item}><input type="radio" name="material" checked={form.material === item} onChange={() => update('material', item)} />{item}</label>)}</div></Field><Field label="給老師的備註"><textarea value={form.note} onChange={(e) => update('note', e.target.value)} placeholder="有想特別告訴老師的事嗎？（選填）" rows={3} /></Field></div></div><div className="form-submit"><span><ShieldCheck size={16} /> 資料會安全留存，僅供課務使用</span><button className="button primary" disabled={loading}>{loading ? '送出中…' : '送出新生登記'} <ChevronRight size={17} /></button></div></form></div>
+  return <div className="page-width form-page"><div className="page-heading"><div><div className="eyebrow">NEW STUDENT / 01</div><h1>先讓我們認識<br /><em>你的孩子。</em></h1></div><p>填寫後送出，老師會在確認學生資訊與地區後，建立正式檔案。</p></div><form className="form-card" onSubmit={onSubmit}><div className="form-section"><div className="section-number">01</div><div className="form-section-content"><h2>學生基本資料</h2><p className="helper">這些資訊只會提供給老師查看。</p><div className="form-grid two"><Field label="學生姓名" required><input required value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="例如：陳昀安" /></Field><Field label="年級" required><select required value={form.grade} onChange={(e) => update('grade', e.target.value)}><option value="">請選擇年級</option>{['小一','小二','小三','小四','小五','小六','國一','國二','國三','高一','高二','高三'].map((grade) => <option key={grade}>{grade}</option>)}</select></Field></div><div className="form-grid two"><Field label="學校" required><input required value={form.school} onChange={(e) => update('school', e.target.value)} placeholder="例如：蘭雅國中" /></Field><Field label="欲加強科目" required><input required value={form.focus} onChange={(e) => update('focus', e.target.value)} /></Field></div></div></div><div className="form-section"><div className="section-number">02</div><div className="form-section-content"><h2>上課與聯絡</h2><p className="helper">請填寫完整上課地址（不用填樓層）；地區會由老師審核後標記。</p><Field label="詳盡地址（無須樓層）" required><input required value={form.location} onChange={(e) => update('location', e.target.value)} placeholder="例如：台北市士林區中山北路六段 123 號" /></Field><ContactFields contact={contact} onChange={setContact} /><Field label="講義安排" required><div className="choice-row">{(['自編','已有','購買市售'] as const).map((item) => <label className={form.material === item ? 'choice selected' : 'choice'} key={item}><input type="radio" name="material" checked={form.material === item} onChange={() => update('material', item)} />{item}</label>)}</div></Field><Field label="給老師的備註"><textarea value={form.note} onChange={(e) => update('note', e.target.value)} placeholder="有想特別告訴老師的事嗎？（選填）" rows={3} /></Field></div></div><div className="form-submit"><span><ShieldCheck size={16} /> 資料會安全留存，僅供課務使用</span><button className="button primary" disabled={loading}>{loading ? '送出中…' : '送出新生登記'} <ChevronRight size={17} /></button></div></form></div>
 }
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) { return <label className="field"><span>{label}{required && <i> *</i>}</span>{children}</label> }
@@ -284,6 +327,8 @@ function DateTimePicker({ label, value, minimum, onChange }: {
 
 function ParentBookingPage({ notify, teacher }: { notify: (message: string) => void; teacher: TeacherProfile | null }) {
   const [name, setName] = useState('')
+  const [needsContact, setNeedsContact] = useState(false)
+  const [contactConfirmation, setContactConfirmation] = useState('')
   const [matches, setMatches] = useState<PublicStudent[]>([])
   const [student, setStudent] = useState<PublicStudent | null>(null)
   const [availability, setAvailability] = useState<PublicAvailability[]>([])
@@ -293,11 +338,34 @@ function ParentBookingPage({ notify, teacher }: { notify: (message: string) => v
   const teacherId = teacher?.id ?? 'teacher-a'
   const [bookingOpen, setBookingOpen] = useState<boolean | null>(null)
   useEffect(() => { let active = true; setBookingOpen(null); void getPublicBookingStatus(teacherId).then((value) => { if (active) setBookingOpen(value) }).catch((error) => { if (active) { setBookingOpen(false); notify(error instanceof Error ? error.message : '無法確認選課期間') } }); return () => { active = false } }, [teacherId])
-  const search = async (event: FormEvent) => { event.preventDefault(); setLoading(true); setMatches([]); setStudent(null); try { const rows = await lookupStudents(name, teacherId); setMatches(rows); if (rows.length === 0) notify('找不到符合的正式學生，請確認姓名或聯絡老師') } catch (error) { notify(error instanceof Error ? error.message : '查詢失敗') } finally { setLoading(false) } }
+  const search = async (event: FormEvent) => {
+    event.preventDefault()
+    if (loading) return
+    setLoading(true)
+    setMatches([])
+    setStudent(null)
+    try {
+      const lookup = await lookupStudents(name, teacherId, needsContact ? contactConfirmation : undefined)
+      setMatches(lookup.students)
+      setNeedsContact(lookup.needsContact)
+      if (lookup.needsContact && needsContact) notify('無法確認學生，請核對登記資料或聯絡老師。')
+      if (!lookup.needsContact && !lookup.students.length) notify('找不到符合的正式學生，請確認姓名或聯絡老師。')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '查詢失敗')
+    } finally {
+      setLoading(false)
+    }
+  }
   const chooseStudent = async (item: PublicStudent) => { setStudent(item); setMatches([]); setLoading(true); try { setAvailability(await getParentAvailability(item.id, teacherId)) } catch (error) { notify(error instanceof Error ? error.message : '讀取時段失敗') } finally { setLoading(false) } }
   const refresh = async () => { if (!student) return; setLoading(true); try { setAvailability(await getParentAvailability(student.id, teacherId)); setSelected({}); notify('已更新最新可選時段') } finally { setLoading(false) } }
   const submit = async () => { const selections = Object.values(selected); if (!selections.length) { notify('請先選擇至少一個時段'); return } const invalid = selections.some((selection) => { const slot = availability.find((item) => item.id === selection.slotId); return !slot?.segments.some((segment) => isValidBookingRange(selection.start, selection.end, segment)) }); if (invalid) { notify('上課時間必須完整落在目前可選空檔內，請重新選擇'); return } setLoading(true); try { const response = await bookSelections(student!.id, selections, teacherId); setResult({ success: response.bookings.length, rejected: response.rejected.length }); setSelected({}); await refresh() } catch (error) { notify(error instanceof Error ? error.message : '選課失敗') } finally { setLoading(false) } }
-  return <div className="page-width booking-page"><div className="page-heading booking-heading compact-page-heading"><div><div className="eyebrow">PARENT COURSE SELECTION</div><h1>家長選課</h1></div></div>{bookingOpen === null ? <div className="empty-state"><Clock3 size={25} /><h3>確認選課期間中…</h3></div> : !bookingOpen ? <div className="booking-closed-state"><Clock3 size={30} /><h2>不在選課期間</h2><p>目前無法選課，請依老師通知的時間再回來。</p></div> : !student ? <div className="lookup-card"><h2>輸入學生姓名</h2><form onSubmit={search} className="lookup-form"><input value={name} onChange={(e) => setName(e.target.value)} required placeholder="學生姓名" autoComplete="off" /><button className="button primary" disabled={loading}>查詢 <ChevronRight size={17} /></button></form>{matches.length > 0 && <div className="match-list"><div className="match-label">同名學生請用聯絡方式末三碼確認</div>{matches.map((item) => <button className="match-row" key={item.id} onClick={() => chooseStudent(item)}><span className="avatar">{item.name.slice(0, 1)}</span><span><b>{item.name}</b><small>{item.region} · 末三碼 {item.phoneSuffix}</small></span><ChevronRight size={17} /></button>)}</div>}<div className="privacy-note"><ShieldCheck size={16} /><span>只顯示符合的學生與可選時段。</span></div></div> : <div className="booking-workspace"><div className="selected-student"><div><span className="eyebrow">CURRENT STUDENT</span><h2>{student.name} <span>{student.region}</span></h2><p>聯絡方式末三碼 · {student.phoneSuffix}</p></div><button className="button quiet" onClick={() => { setStudent(null); setAvailability([]) }}>切換學生</button></div><div className="availability-toolbar"><div><h2>可選時段</h2></div><button className="refresh-button" onClick={refresh}><RefreshCw size={16} className={loading ? 'spin' : ''} /> 更新</button></div>{result && <div className="result-banner"><Check size={18} /><span>已成功選課 {result.success} 段{result.rejected ? `，${result.rejected} 段已被其他人先選走。` : ''}</span><button onClick={() => setResult(null)}><X size={16} /></button></div>}{availability.length ? <div className="slot-list">{availability.map((slot) => <BookableSlot key={slot.id} slot={slot} selection={selected[slot.id]} onChange={(selection) => setSelected((current) => selection ? { ...current, [slot.id]: selection } : Object.fromEntries(Object.entries(current).filter(([id]) => id !== slot.id)))} />)}</div> : <div className="empty-state"><CalendarDays size={25} /><h3>目前沒有可選時段</h3></div>}<div className="booking-submit"><div><b>{Object.keys(selected).length}</b> 個時段</div><button className="button primary" disabled={loading || !Object.keys(selected).length} onClick={submit}>{loading ? '確認中…' : '送出選課'} <Check size={17} /></button></div></div>}</div>
+  return <div className="page-width booking-page"><div className="page-heading booking-heading compact-page-heading"><div><div className="eyebrow">PARENT COURSE SELECTION</div><h1>家長選課</h1></div></div>{bookingOpen === null ? <div className="empty-state"><Clock3 size={25} /><h3>確認選課期間中…</h3></div> : !bookingOpen ? <div className="booking-closed-state"><Clock3 size={30} /><h2>不在選課期間</h2><p>目前無法選課，請依老師通知的時間再回來。</p></div> : !student ? <div className="lookup-card"><h2>輸入學生姓名</h2><form onSubmit={search} className="lookup-form contact-lookup-form">
+        <div className="lookup-fields">
+          <input aria-label="學生姓名" value={name} onChange={(event) => { setName(event.target.value); setNeedsContact(false); setContactConfirmation(''); setMatches([]) }} required disabled={loading} placeholder="學生姓名" autoComplete="off" />
+          {needsContact && <Field label="聯絡名稱或電話末三碼" required><input value={contactConfirmation} onChange={(event) => setContactConfirmation(event.target.value)} required disabled={loading} maxLength={80} autoComplete="off" /></Field>}
+        </div>
+        <button className="button primary" disabled={loading}>{needsContact ? '確認學生' : '查詢'} <ChevronRight size={17} /></button>
+      </form>{matches.length > 0 && <div className="match-list"><div className="match-label">確認選課學生</div>{matches.map((item) => <button className="match-row" key={item.id} onClick={() => chooseStudent(item)}><span className="avatar">{item.name.slice(0, 1)}</span><span><b>{item.name}</b><small>{item.region}</small></span><ChevronRight size={17} /></button>)}</div>}<div className="privacy-note"><ShieldCheck size={16} /><span>只顯示符合的學生與可選時段。</span></div></div> : <div className="booking-workspace"><div className="selected-student"><div><span className="eyebrow">CURRENT STUDENT</span><h2>{student.name} <span>{student.region}</span></h2></div><button className="button quiet" onClick={() => { setStudent(null); setAvailability([]); setNeedsContact(false); setContactConfirmation('') }}>切換學生</button></div><div className="availability-toolbar"><div><h2>可選時段</h2></div><button className="refresh-button" onClick={refresh}><RefreshCw size={16} className={loading ? 'spin' : ''} /> 更新</button></div>{result && <div className="result-banner"><Check size={18} /><span>已成功選課 {result.success} 段{result.rejected ? `，${result.rejected} 段已被其他人先選走。` : ''}</span><button onClick={() => setResult(null)}><X size={16} /></button></div>}{availability.length ? <div className="slot-list">{availability.map((slot) => <BookableSlot key={slot.id} slot={slot} selection={selected[slot.id]} onChange={(selection) => setSelected((current) => selection ? { ...current, [slot.id]: selection } : Object.fromEntries(Object.entries(current).filter(([id]) => id !== slot.id)))} />)}</div> : <div className="empty-state"><CalendarDays size={25} /><h3>目前沒有可選時段</h3></div>}<div className="booking-submit"><div><b>{Object.keys(selected).length}</b> 個時段</div><button className="button primary" disabled={loading || !Object.keys(selected).length} onClick={submit}>{loading ? '確認中…' : '送出選課'} <Check size={17} /></button></div></div>}</div>
 }
 
 function TeacherAvailabilityPage({ notify, teacher }: { notify: (message: string) => void; teacher: TeacherProfile | null }) {
@@ -381,7 +449,7 @@ function StudentsTab({ registrations, students, tagOptions, teacherId, reload, n
       <div className="tab-switch"><button className={filter === 'pending' ? 'active' : ''} onClick={() => setFilter('pending')}>待審核 <b>{pending.length}</b></button><button className={filter === 'students' ? 'active' : ''} onClick={() => setFilter('students')}>正式學生 <b>{students.length}</b></button></div>
       {filter === 'students' && <button type="button" className="small-button add-student-button" onClick={() => setEditing('new')}><Plus size={15} />新增現有學生</button>}
     </div>
-    {filter === 'pending' ? <div className="panel table-panel"><div className="table-heading"><div><h2>待審核的新生</h2><p>清單先顯示姓名與手機，點選查看詳情可查看家長填寫的完整資訊。</p></div></div><div className="data-table pending-table"><div className="table-row table-header pending-row"><span>學生姓名</span><span>手機號碼</span><span>操作</span></div>{pending.map((item) => <div className="table-row pending-row" key={item.id}><span><b>{item.name}</b></span><span>{item.phone}</span><span className="table-actions"><button className="small-button" onClick={() => setReviewing(item)}><Pencil size={14} /> 查看詳情</button></span></div>)}{!pending.length && <div className="empty-inline">目前沒有待審核資料</div>}</div></div> : <div className="student-cards">{students.map((student) => <div className="student-card student-card-clickable" key={student.id} onClick={() => setViewing(student)}><div className="student-card-head"><span className="avatar">{student.name.slice(0, 1)}</span><div><h3>{student.name}</h3><p>{student.school} · {student.grade}</p></div><button type="button" className="small-button" onClick={(event) => { event.stopPropagation(); setViewing(student) }}>查看個資</button></div><div className="student-details"><span><b>地區</b><em className={student.region ? 'region-badge' : 'unassigned'}>{student.region ?? '尚未標記'}</em></span></div></div>)}</div>}{viewing && <StudentViewModal student={viewing} tagOptions={tagOptions} teacherId={teacherId} close={() => setViewing(null)} editProfile={() => { setViewing(null); setEditing(viewing) }} reload={reload} notify={notify} />}{editing && <StudentEditor student={editing === 'new' ? undefined : editing} tagOptions={tagOptions} teacherId={teacherId} close={() => setEditing(null)} reload={reload} notify={notify} />}{reviewing && <RegistrationReviewModal registration={reviewing} teacherId={teacherId} close={() => setReviewing(null)} reload={reload} notify={notify} />}</div>
+    {filter === 'pending' ? <div className="panel table-panel"><div className="table-heading"><div><h2>待審核的新生</h2><p>清單先顯示姓名與聯絡方式，點選查看詳情可查看家長填寫的完整資訊。</p></div></div><div className="data-table pending-table"><div className="table-row table-header pending-row"><span>學生姓名</span><span>聯絡方式</span><span>操作</span></div>{pending.map((item) => <div className="table-row pending-row" key={item.id}><span><b>{item.name}</b></span><span>{displayContact(item)}</span><span className="table-actions"><button className="small-button" onClick={() => setReviewing(item)}><Pencil size={14} /> 查看詳情</button></span></div>)}{!pending.length && <div className="empty-inline">目前沒有待審核資料</div>}</div></div> : <div className="student-cards">{students.map((student) => <div className="student-card student-card-clickable" key={student.id} onClick={() => setViewing(student)}><div className="student-card-head"><span className="avatar">{student.name.slice(0, 1)}</span><div><h3>{student.name}</h3><p>{student.school} · {student.grade}</p></div><button type="button" className="small-button" onClick={(event) => { event.stopPropagation(); setViewing(student) }}>查看個資</button></div><div className="student-details"><span><b>地區</b><em className={student.region ? 'region-badge' : 'unassigned'}>{student.region ?? '尚未標記'}</em></span></div></div>)}</div>}{viewing && <StudentViewModal student={viewing} tagOptions={tagOptions} teacherId={teacherId} close={() => setViewing(null)} editProfile={() => { setViewing(null); setEditing(viewing) }} reload={reload} notify={notify} />}{editing && <StudentEditor student={editing === 'new' ? undefined : editing} tagOptions={tagOptions} teacherId={teacherId} close={() => setEditing(null)} reload={reload} notify={notify} />}{reviewing && <RegistrationReviewModal registration={reviewing} teacherId={teacherId} close={() => setReviewing(null)} reload={reload} notify={notify} />}</div>
 }
 
 function StudentViewModal({ student, tagOptions, teacherId, close, editProfile, reload, notify }: { student: Student; tagOptions: string[]; teacherId: string; close: () => void; editProfile: () => void; reload: () => Promise<void>; notify: (message: string) => void }) {
@@ -401,7 +469,7 @@ function StudentViewModal({ student, tagOptions, teacherId, close, editProfile, 
       setSaving(false)
     }
   }
-  return <div className="modal-backdrop"><div className="modal student-view-modal"><button type="button" className="modal-close" onClick={close}><X /></button><div className="student-view-top"><div><div className="eyebrow">STUDENT PROFILE</div><h2>{student.name}</h2></div><button type="button" className="small-button" onClick={editProfile}><Pencil size={14} /> 編輯個資</button></div><div className="review-grid"><div><b>年級</b><span>{student.grade || '—'}</span></div><div><b>學校</b><span>{student.school || '—'}</span></div><div><b>家長聯絡方式</b><span>{student.phone || '—'}</span></div><div><b>欲加強項目</b><span>{student.focus || '—'}</span></div><div className="review-note"><b>詳盡地址</b><span>{student.location || '—'}</span></div><div><b>講義安排</b><span>{student.material || '—'}</span></div></div><div className="student-region-editor"><div><b>上課地區</b><small>檢視頁面只能修改地區標示。</small></div><div className="region-choice-grid"><button type="button" className={!region ? 'region-choice selected' : 'region-choice'} onClick={() => setRegion(null)}>尚未標記</button>{regionOptions.map((item) => <button type="button" key={item} className={region === item ? 'region-choice selected' : 'region-choice'} onClick={() => setRegion(item)}>{item}</button>)}</div></div><div className="modal-actions"><button type="button" className="button quiet" onClick={close}>關閉</button><button type="button" className="button primary" disabled={saving} onClick={() => void saveRegion()}>{saving ? '儲存中…' : '儲存地區'}</button></div></div></div>
+  return <div className="modal-backdrop"><div className="modal student-view-modal"><button type="button" className="modal-close" onClick={close}><X /></button><div className="student-view-top"><div><div className="eyebrow">STUDENT PROFILE</div><h2>{student.name}</h2></div><button type="button" className="small-button" onClick={editProfile}><Pencil size={14} /> 編輯個資</button></div><div className="review-grid"><div><b>年級</b><span>{student.grade || '—'}</span></div><div><b>學校</b><span>{student.school || '—'}</span></div><div><b>家長聯絡方式</b><span>{displayContact(student)}</span></div><div><b>欲加強科目</b><span>{student.focus || '—'}</span></div><div className="review-note"><b>詳盡地址</b><span>{student.location || '—'}</span></div><div><b>講義安排</b><span>{student.material || '—'}</span></div></div><div className="student-region-editor"><div><b>上課地區</b><small>檢視頁面只能修改地區標示。</small></div><div className="region-choice-grid"><button type="button" className={!region ? 'region-choice selected' : 'region-choice'} onClick={() => setRegion(null)}>尚未標記</button>{regionOptions.map((item) => <button type="button" key={item} className={region === item ? 'region-choice selected' : 'region-choice'} onClick={() => setRegion(item)}>{item}</button>)}</div></div><div className="modal-actions"><button type="button" className="button quiet" onClick={close}>關閉</button><button type="button" className="button primary" disabled={saving} onClick={() => void saveRegion()}>{saving ? '儲存中…' : '儲存地區'}</button></div></div></div>
 }
 
 function StudentEditor({ student, tagOptions, teacherId, close, reload, notify }: {
@@ -418,7 +486,10 @@ function StudentEditor({ student, tagOptions, teacherId, close, reload, notify }
   const [region, setRegion] = useState<Region | null>(student?.region ?? null)
   const [focus, setFocus] = useState(student?.focus ?? '')
   const [location, setLocation] = useState(student?.location ?? '')
-  const [phone, setPhone] = useState(student?.phone ?? '')
+  const [contact, setContact] = useState<ContactDraft>(() => ({
+    method: student ? student.contactMethod ?? 'phone' : '',
+    value: student?.contactName ?? student?.phone ?? '',
+  }))
   const [material, setMaterial] = useState<MaterialPlan>(student?.material ?? '自編')
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
@@ -427,15 +498,15 @@ function StudentEditor({ student, tagOptions, teacherId, close, reload, notify }
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (saving) return
-    if (![name, grade, school, focus, location, phone].every((value) => value.trim())) {
+    const details = filledContact(contact)
+    if (!details || ![name, grade, school, focus, location].every((value) => value.trim())) {
       setFormError('請完整填寫學生個資。')
       return
     }
 
     const profile = {
       name: name.trim(), grade: grade.trim(), school: school.trim(),
-      focus: focus.trim(), location: location.trim(), phone: phone.trim(),
-      material, region,
+      focus: focus.trim(), location: location.trim(), material, region, ...details,
     }
     setSaving(true)
     setFormError('')
@@ -477,10 +548,10 @@ function StudentEditor({ student, tagOptions, teacherId, close, reload, notify }
             <Field label="學生姓名" required><input required value={name} maxLength={80} onChange={(e) => setName(e.target.value)} /></Field>
             <Field label="年級" required><input required value={grade} maxLength={40} onChange={(e) => setGrade(e.target.value)} /></Field>
             <Field label="學校" required><input required value={school} maxLength={120} onChange={(e) => setSchool(e.target.value)} /></Field>
-            <Field label="家長聯絡方式" required><input type="tel" required value={phone} maxLength={40} onChange={(e) => setPhone(e.target.value)} /></Field>
+            <Field label="欲加強科目" required><input required value={focus} maxLength={240} onChange={(e) => setFocus(e.target.value)} /></Field>
           </div>
-          <Field label="欲加強項目" required><input required value={focus} maxLength={240} onChange={(e) => setFocus(e.target.value)} /></Field>
           <Field label="詳盡地址（無須樓層）" required><input required value={location} maxLength={240} onChange={(e) => setLocation(e.target.value)} /></Field>
+          <ContactFields contact={contact} onChange={setContact} />
           <div className="form-grid two">
             <Field label="講義安排"><select value={material} onChange={(e) => setMaterial(e.target.value as MaterialPlan)}><option>自編</option><option>已有</option><option>購買市售</option></select></Field>
             <div className="field">
@@ -506,7 +577,7 @@ function StudentEditor({ student, tagOptions, teacherId, close, reload, notify }
 function RegistrationReviewModal({ registration, teacherId, close, reload, notify }: { registration: Registration; teacherId: string; close: () => void; reload: () => Promise<void>; notify: (message: string) => void }) {
   const approve = async () => { try { await approveRegistration(registration.id, teacherId); await reload(); close(); notify('已通過審核並建立正式學生檔案') } catch (error) { notify(error instanceof Error ? error.message : '審核失敗') } }
   const remove = async () => { if (!window.confirm(`確定要刪除 ${registration.name} 的新生登記嗎？`)) return; try { await deleteRegistration(registration.id, teacherId); await reload(); close(); notify('新生登記已刪除') } catch (error) { notify(error instanceof Error ? error.message : '刪除失敗') } }
-  return <div className="modal-backdrop"><div className="modal review-modal"><button className="modal-close" onClick={close}><X /></button><div className="eyebrow">FULL REGISTRATION DETAILS</div><h2>{registration.name} 的新生資料</h2><p>送出時間：{formatTimestamp(registration.createdAt)}</p><div className="review-grid"><div><b>年級</b><span>{registration.grade}</span></div><div><b>學校</b><span>{registration.school}</span></div><div><b>欲加強項目</b><span>{registration.focus}</span></div><div><b>詳盡地址</b><span>{registration.location}</span></div><div><b>家長聯絡方式</b><span>{registration.phone}</span></div><div><b>講義安排</b><span>{registration.material}</span></div><div className="review-note"><b>給老師的備註</b><span>{registration.note || '家長未填寫備註'}</span></div></div><div className="modal-actions"><button className="text-button danger delete-action" onClick={() => void remove()}><Trash2 size={15} /> 刪除登記</button><button className="button quiet" onClick={close}>稍後處理</button><button className="button primary" onClick={() => void approve()}><Check size={16} /> 通過並建立檔案</button></div></div></div>
+  return <div className="modal-backdrop"><div className="modal review-modal"><button className="modal-close" onClick={close}><X /></button><div className="eyebrow">FULL REGISTRATION DETAILS</div><h2>{registration.name} 的新生資料</h2><p>送出時間：{formatTimestamp(registration.createdAt)}</p><div className="review-grid"><div><b>年級</b><span>{registration.grade}</span></div><div><b>學校</b><span>{registration.school}</span></div><div><b>欲加強科目</b><span>{registration.focus}</span></div><div><b>詳盡地址</b><span>{registration.location}</span></div><div><b>家長聯絡方式</b><span>{displayContact(registration)}</span></div><div><b>講義安排</b><span>{registration.material}</span></div><div className="review-note"><b>給老師的備註</b><span>{registration.note || '家長未填寫備註'}</span></div></div><div className="modal-actions"><button className="text-button danger delete-action" onClick={() => void remove()}><Trash2 size={15} /> 刪除登記</button><button className="button quiet" onClick={close}>稍後處理</button><button className="button primary" onClick={() => void approve()}><Check size={16} /> 通過並建立檔案</button></div></div></div>
 }
 
 function ScheduleTab({ slots, teacherId, reload, notify }: { slots: AvailabilitySlot[]; teacherId: string; reload: () => Promise<void>; notify: (message: string) => void }) {
@@ -669,7 +740,7 @@ function BookingActionModalLegacy({ booking, slot, teacherId, close, cancel, rel
   const segmentTimes = Array.from(new Set(segments.flatMap((item) => timeOptions.filter((time) => withinTime(time, item.start, item.end))))).sort()
   const valid = segments.some((item) => isValidBookingRange(start, end, item))
   const save = async () => { if (!valid) { notify('時間必須落在沒有其他預約的空檔內'); return } setSaving(true); try { await updateBooking(booking.id, start, end, teacherId); await reload(); close(); notify('學生上課時間已修改') } catch (error) { notify(error instanceof Error ? error.message : '修改預約失敗') } finally { setSaving(false) } }
-  return <div className="modal-backdrop"><div className="modal booking-action-modal"><button type="button" className="modal-close" onClick={close}><X /></button><div className="eyebrow">BOOKING DETAILS</div><h2>{booking.studentName}</h2><div className="student-review-grid"><span><b>年級</b>{booking.studentGrade || '—'}</span><span><b>學校</b>{booking.studentSchool || '—'}</span><span><b>電話</b>{booking.studentPhone || '—'}</span><span><b>地區</b>{booking.region}</span><span className="student-review-wide"><b>上課地址</b>{booking.studentLocation || '—'}</span><span className="student-review-wide"><b>加強項目</b>{booking.studentFocus || '—'}</span></div><div className="booking-time-editor"><b>修改學生上課時間</b><div className="form-grid two"><Field label="開始"><select value={start} onChange={(e) => setStart(e.target.value)}>{segmentTimes.filter((time) => toMinutes(time) < toMinutes(end)).map((time) => <option key={time}>{time}</option>)}</select></Field><Field label="結束"><select value={end} onChange={(e) => setEnd(e.target.value)}>{segmentTimes.filter((time) => toMinutes(time) > toMinutes(start)).map((time) => <option key={time}>{time}</option>)}</select></Field></div>{!valid && <small className="field-error">開始與結束時間必須落在同一段空檔內</small>}</div><div className="modal-actions"><button type="button" className="text-button danger delete-action" onClick={() => void cancel(booking)}><Trash2 size={15} /> 刪除預約</button><button type="button" className="button quiet" onClick={close}>關閉</button><button type="button" className="button primary" disabled={saving || !valid} onClick={() => void save}>{saving ? '儲存中…' : '儲存時間修改'}</button></div></div></div>
+  return <div className="modal-backdrop"><div className="modal booking-action-modal"><button type="button" className="modal-close" onClick={close}><X /></button><div className="eyebrow">BOOKING DETAILS</div><h2>{booking.studentName}</h2><div className="student-review-grid"><span><b>年級</b>{booking.studentGrade || '—'}</span><span><b>學校</b>{booking.studentSchool || '—'}</span><span><b>聯絡方式</b>{displayContact({ phone: booking.studentPhone ?? null, contactMethod: booking.studentContactMethod, contactName: booking.studentContactName })}</span><span><b>地區</b>{booking.region}</span><span className="student-review-wide"><b>上課地址</b>{booking.studentLocation || '—'}</span><span className="student-review-wide"><b>加強項目</b>{booking.studentFocus || '—'}</span></div><div className="booking-time-editor"><b>修改學生上課時間</b><div className="form-grid two"><Field label="開始"><select value={start} onChange={(e) => setStart(e.target.value)}>{segmentTimes.filter((time) => toMinutes(time) < toMinutes(end)).map((time) => <option key={time}>{time}</option>)}</select></Field><Field label="結束"><select value={end} onChange={(e) => setEnd(e.target.value)}>{segmentTimes.filter((time) => toMinutes(time) > toMinutes(start)).map((time) => <option key={time}>{time}</option>)}</select></Field></div>{!valid && <small className="field-error">開始與結束時間必須落在同一段空檔內</small>}</div><div className="modal-actions"><button type="button" className="text-button danger delete-action" onClick={() => void cancel(booking)}><Trash2 size={15} /> 刪除預約</button><button type="button" className="button quiet" onClick={close}>關閉</button><button type="button" className="button primary" disabled={saving || !valid} onClick={() => void save}>{saving ? '儲存中…' : '儲存時間修改'}</button></div></div></div>
 }
 
 function BookingActionModal({ booking, slot, teacherId, close, cancel, reload, notify }: { booking: Booking; slot: AvailabilitySlot; teacherId: string; close: () => void; cancel: (booking: Booking) => Promise<void>; reload: () => Promise<void>; notify: (message: string) => void }) {
@@ -680,7 +751,7 @@ function BookingActionModal({ booking, slot, teacherId, close, cancel, reload, n
   const available = Array.from(new Set(segments.flatMap((item) => timeOptions.filter((time) => withinTime(time, item.start, item.end))))).sort()
   const valid = segments.some((item) => isValidBookingRange(start, end, item))
   const save = async () => { if (!valid) { notify('時間必須落在沒有其他預約的空檔內'); return } setSaving(true); try { await updateBooking(booking.id, start, end, teacherId); await reload(); close(); notify('學生上課時間已修改') } catch (error) { notify(error instanceof Error ? error.message : '修改預約失敗') } finally { setSaving(false) } }
-  return <div className="modal-backdrop"><div className="modal booking-action-modal"><button type="button" className="modal-close" onClick={close}><X /></button><div className="eyebrow">BOOKING DETAILS</div><h2>{booking.studentName}</h2><div className="student-review-grid"><span><b>年級</b>{booking.studentGrade || '—'}</span><span><b>學校</b>{booking.studentSchool || '—'}</span><span><b>電話</b>{booking.studentPhone || '—'}</span><span><b>地區</b>{booking.region}</span><span className="student-review-wide"><b>上課地址</b>{booking.studentLocation || '—'}</span><span className="student-review-wide"><b>加強項目</b>{booking.studentFocus || '—'}</span></div><div className="booking-time-editor"><b>修改學生上課時間</b><div className="form-grid two"><Field label="開始"><TimePicker value={start} options={available.filter((time) => toMinutes(time) < toMinutes(end))} onChange={setStart} /></Field><Field label="結束"><TimePicker value={end} options={available.filter((time) => toMinutes(time) > toMinutes(start))} onChange={setEnd} /></Field></div>{!valid && <small className="field-error">開始與結束時間必須落在同一段空檔內</small>}</div><div className="modal-actions"><button type="button" className="text-button danger delete-action" onClick={() => void cancel(booking)}><Trash2 size={15} /> 刪除預約</button><button type="button" className="button quiet" onClick={close}>關閉</button><button type="button" className="button primary" disabled={saving || !valid} onClick={() => void save}>{saving ? '儲存中…' : '儲存時間修改'}</button></div></div></div>
+  return <div className="modal-backdrop"><div className="modal booking-action-modal"><button type="button" className="modal-close" onClick={close}><X /></button><div className="eyebrow">BOOKING DETAILS</div><h2>{booking.studentName}</h2><div className="student-review-grid"><span><b>年級</b>{booking.studentGrade || '—'}</span><span><b>學校</b>{booking.studentSchool || '—'}</span><span><b>聯絡方式</b>{displayContact({ phone: booking.studentPhone ?? null, contactMethod: booking.studentContactMethod, contactName: booking.studentContactName })}</span><span><b>地區</b>{booking.region}</span><span className="student-review-wide"><b>上課地址</b>{booking.studentLocation || '—'}</span><span className="student-review-wide"><b>加強項目</b>{booking.studentFocus || '—'}</span></div><div className="booking-time-editor"><b>修改學生上課時間</b><div className="form-grid two"><Field label="開始"><TimePicker value={start} options={available.filter((time) => toMinutes(time) < toMinutes(end))} onChange={setStart} /></Field><Field label="結束"><TimePicker value={end} options={available.filter((time) => toMinutes(time) > toMinutes(start))} onChange={setEnd} /></Field></div>{!valid && <small className="field-error">開始與結束時間必須落在同一段空檔內</small>}</div><div className="modal-actions"><button type="button" className="text-button danger delete-action" onClick={() => void cancel(booking)}><Trash2 size={15} /> 刪除預約</button><button type="button" className="button quiet" onClick={close}>關閉</button><button type="button" className="button primary" disabled={saving || !valid} onClick={() => void save}>{saving ? '儲存中…' : '儲存時間修改'}</button></div></div></div>
 }
 
 const timetableStudentHues = [0, 28, 213, 151, 271, 333, 180, 52, 245, 103, 302]
