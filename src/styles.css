@@ -691,17 +691,20 @@ body:has(.picker-dialog[open]) { overflow:hidden; }
 .registration-step h2:focus, .success-card h1:focus { outline:none; }
 .registration-step .form-grid { margin-bottom:0; }
 .registration-error { margin-top:14px; padding:10px; border-radius:8px; color:#893c33; background:#fff2ef; font-size:13px; }
-.registration-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px 24px; border-top:1px solid #e9e9e3; background:#fbfcf9; }
-.registration-footer > p { margin:0; color:#62786e; font-size:12px; }
-.registration-actions { display:flex; gap:8px; }
-.registration-actions .button { min-height:44px; }
+.registration-footer { display:grid; gap:12px; padding:15px 24px; border-top:1px solid #e9e9e3; background:#fbfcf9; }
+.registration-footer > p { margin:0; color:#62786e; font-size:12px; text-align:center; }
+.registration-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.registration-actions .button {
+  width:100%; min-width:0; min-height:44px;
+  transition:background-color .2s, border-color .2s, color .2s, box-shadow .2s;
+}
+.registration-actions .button:only-child { grid-column:1 / -1; justify-self:center; width:min(100%,220px); }
 
 @media (max-width:650px) {
   .registration-flow { padding:24px 0 40px; }
   .registration-flow > h1 { font-size:27px; }
   .registration-step, .registration-footer { padding:16px; }
-  .registration-footer { display:grid; }
-  .registration-actions .button { flex:1; justify-content:center; padding-inline:9px; }
+  .registration-actions .button { padding-inline:9px; }
 }
 
 .booking-page .contact-lookup-form { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; }
