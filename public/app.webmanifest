@@ -1,0 +1,11 @@
+{
+  "name": "課間 Between Classes",
+  "short_name": "課間",
+  "id": "./",
+  "scope": "./",
+  "start_url": "./",
+  "display": "standalone",
+  "theme_color": "#0e3b3b",
+  "background_color": "#f7f5f0",
+  "icons": [{ "src": "./app-icon.jpg", "sizes": "1465x1465", "type": "image/jpeg", "purpose": "any" }]
+}

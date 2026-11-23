@@ -1,5 +1,6 @@
 import { StrictMode, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { CalendarDays, Check, ChevronRight, Clock3, Copy, DoorOpen, GraduationCap, LogIn, MapPin, Menu, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import './styles.css'
@@ -98,7 +99,6 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 function TimeWheels({ value, onChange, options }: { value: string; onChange: (value: string) => void; options?: string[] }) {
   const safeOptions = Array.from(new Set((options ?? timeOptions).filter((item) => /^\d{2}:\d{2}$/.test(item)))).sort((a, b) => toMinutes(a) - toMinutes(b))
-  if (!safeOptions.length) return <div className="picker-empty">目前沒有符合條件的時間</div>
   const selected = safeOptions.includes(value) ? value : safeOptions[0] ?? '00:00'
   const [selectedHour, selectedMinute] = selected.split(':')
   const hours = Array.from(new Set(safeOptions.map((item) => item.slice(0, 2))))
@@ -106,11 +106,18 @@ function TimeWheels({ value, onChange, options }: { value: string; onChange: (va
   const hourRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const minuteRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   useEffect(() => {
-    window.setTimeout(() => {
-      hourRefs.current[selectedHour]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      minuteRefs.current[selectedMinute]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    }, 0)
+    // Scroll only the wheel. Moving the page or dialog can hide its header.
+    const frame = window.requestAnimationFrame(() => {
+      for (const button of [hourRefs.current[selectedHour], minuteRefs.current[selectedMinute]]) {
+        const wheel = button?.parentElement
+        if (button && wheel) {
+          wheel.scrollTop = button.offsetTop - (wheel.clientHeight - button.offsetHeight) / 2
+        }
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
   }, [selectedHour, selectedMinute])
+  if (!safeOptions.length) return <div className="picker-empty">目前沒有符合條件的時間</div>
   const choose = (part: 'hour' | 'minute', next: string) => {
     const candidate = part === 'hour' ? `${next}:${selectedMinute}` : `${selectedHour}:${next}`
     if (safeOptions.includes(candidate)) { onChange(candidate); return }
@@ -122,50 +129,122 @@ function TimeWheels({ value, onChange, options }: { value: string; onChange: (va
   return <div className="picker-time-wheels"><div className="picker-wheel-column"><span className="picker-wheel-label">時</span><div className="picker-wheel" role="listbox" aria-label="選擇小時">{hours.map((hour) => <button type="button" role="option" aria-selected={hour === selectedHour} className={hour === selectedHour ? 'selected' : ''} key={hour} ref={(element) => { hourRefs.current[hour] = element }} onClick={() => choose('hour', hour)}>{hour}</button>)}</div></div><div className="picker-wheel-column"><span className="picker-wheel-label">分</span><div className="picker-wheel" role="listbox" aria-label="選擇分鐘">{minutes.map((minute) => <button type="button" role="option" aria-selected={minute === selectedMinute} className={minute === selectedMinute ? 'selected' : ''} key={minute} ref={(element) => { minuteRefs.current[minute] = element }} onClick={() => choose('minute', minute)}>{minute}</button>)}</div></div></div>
 }
 
+function PickerDialog({ label, onDismiss, children }: { label: string; onDismiss: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = dialogRef.current
+    dialog?.showModal()
+    return () => dialog?.close()
+  }, [])
+
+  return createPortal(
+    <dialog ref={dialogRef} className="picker-dialog" aria-label={label} onCancel={(event) => { event.preventDefault(); onDismiss() }}>
+      {children}
+    </dialog>,
+    document.body,
+  )
+}
+
 function TimePicker({ value, onChange, options, disabled = false }: { value: string; onChange: (value: string) => void; options?: string[]; disabled?: boolean }) {
   const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(value)
   const optionKey = options?.join('|') ?? 'all-times'
   useEffect(() => {
     if (options?.length && !options.includes(value)) onChange(options[0])
   }, [optionKey, value])
-  return <div className="custom-picker time-picker"><button type="button" className="custom-picker-trigger" disabled={disabled} onClick={() => setOpen((current) => !current)}><Clock3 size={15} /><span>{value || '選擇時間'}</span><ChevronRight size={14} className={open ? 'picker-arrow-open' : ''} /></button>{open && <div className="custom-picker-popover time-picker-popover" role="dialog" aria-label="自訂時間選擇器"><div className="picker-header"><b>選擇時間</b><small>24 小時制・每 15 分鐘</small></div><TimeWheels value={value} options={options} onChange={onChange} /><button type="button" className="picker-done" onClick={() => setOpen(false)}>完成</button></div>}</div>
+  return <div className="custom-picker time-picker">
+    <button type="button" className="custom-picker-trigger" disabled={disabled || options?.length === 0} aria-haspopup="dialog" aria-expanded={open} onClick={() => { setDraft(value); setOpen(true) }}>
+      <Clock3 size={15} /><span>{value || '選擇時間'}</span><ChevronRight size={14} />
+    </button>
+    {open && <PickerDialog label="選擇時間" onDismiss={() => setOpen(false)}>
+      <div className="picker-header">
+        <div><b>選擇時間</b><small>24 小時制・每 15 分鐘</small></div>
+        <button type="button" className="picker-control" aria-label="取消選擇" onClick={() => setOpen(false)}><X size={18} /></button>
+      </div>
+      <TimeWheels value={draft} options={options} onChange={setDraft} />
+      <button type="button" className="picker-done" onClick={() => { onChange(draft); setOpen(false) }}>完成</button>
+    </PickerDialog>}
+  </div>
 }
 
 const padNumber = (value: number) => String(value).padStart(2, '0')
+const localDate = (value: Date) => `${value.getFullYear()}-${padNumber(value.getMonth() + 1)}-${padNumber(value.getDate())}`
+const toLocalDateTime = (value: string) => {
+  const date = new Date(value)
+  return `${localDate(date)}T${padNumber(date.getHours())}:${padNumber(date.getMinutes())}`
+}
+
 const dateFromInput = (value: string) => {
   const [datePart, timePart = '09:00'] = value.split('T')
-  const date = datePart || new Date().toISOString().slice(0, 10)
+  const date = datePart || localDate(new Date())
   const [year, month] = date.split('-').map(Number)
   return { date, time: timePart.slice(0, 5) || '09:00', month: new Date(year, (month || 1) - 1, 1) }
 }
 
-function DateTimePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function DateTimePicker({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   const initial = dateFromInput(value)
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<'date' | 'time'>('date')
   const [date, setDate] = useState(initial.date)
   const [time, setTime] = useState(initial.time)
   const [month, setMonth] = useState(initial.month)
-  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay()
-  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
-  const calendarCells = Array.from({ length: firstDay + daysInMonth }, (_, index) => index < firstDay ? null : index - firstDay + 1)
-  const chooseDate = (nextDate: string) => { setDate(nextDate); onChange(`${nextDate}T${time}`); setStep('time') }
-  const chooseTime = (nextTime: string) => { setTime(nextTime); onChange(`${date}T${nextTime}`) }
-  const toggle = () => { if (!open) setStep('date'); setOpen((current) => !current) }
-  return <div className="custom-picker datetime-picker"><button type="button" className="custom-picker-trigger" onClick={toggle}><CalendarDays size={15} /><span>{date.replaceAll('-', '/')} {time}</span><ChevronRight size={14} className={open ? 'picker-arrow-open' : ''} /></button>{open && <div className="custom-picker-popover datetime-picker-popover">{step === 'date' ? <><div className="picker-header"><b>先選擇日期</b><small>選好日期後設定時間</small></div><div className="picker-calendar-head"><button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button><b>{month.getFullYear()} 年 {month.getMonth() + 1} 月</b><button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button></div><div className="picker-calendar-week">{['日','一','二','三','四','五','六'].map((label) => <span key={label}>{label}</span>)}</div><div className="picker-calendar-grid">{calendarCells.map((day, index) => day ? <button type="button" key={day} className={date === `${month.getFullYear()}-${padNumber(month.getMonth() + 1)}-${padNumber(day)}` ? 'calendar-picker-day active' : 'calendar-picker-day'} onClick={() => chooseDate(`${month.getFullYear()}-${padNumber(month.getMonth() + 1)}-${padNumber(day)}`)}>{day}</button> : <span key={`empty-${index}`} />)}</div></> : <><div className="picker-header"><button type="button" className="picker-step-back" onClick={() => setStep('date')}>‹</button><div><b>再選擇時間</b><small>{date.replaceAll('-', '/')}</small></div><span className="picker-step-badge">第 2 步</span></div><div className="picker-time-title"><Clock3 size={14} />24 小時制・每 15 分鐘</div><TimeWheels value={time} options={timeOptions} onChange={chooseTime} /><button type="button" className="picker-done" onClick={() => setOpen(false)}>完成</button></>}</div>}</div>
-}
+  const timeHeading = useRef<HTMLElement>(null)
+  const year = month.getFullYear()
+  const monthIndex = month.getMonth()
+  const firstDay = month.getDay()
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate()
 
-function DateTimePickerLegacy({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const initial = dateFromInput(value)
-  const [open, setOpen] = useState(false)
-  const [date, setDate] = useState(initial.date)
-  const [time, setTime] = useState(initial.time)
-  const [month, setMonth] = useState(initial.month)
-  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay()
-  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
-  const calendarCells = Array.from({ length: firstDay + daysInMonth }, (_, index) => index < firstDay ? null : index - firstDay + 1)
-  const commit = (nextDate: string, nextTime: string) => { setDate(nextDate); setTime(nextTime); onChange(`${nextDate}T${nextTime}`) }
-  return <div className="custom-picker datetime-picker"><button type="button" className="custom-picker-trigger" onClick={() => setOpen((current) => !current)}><CalendarDays size={15} /><span>{date.replaceAll('-', '/')} {time}</span><ChevronRight size={14} className={open ? 'picker-arrow-open' : ''} /></button>{open && <div className="custom-picker-popover datetime-picker-popover"><div className="picker-calendar-head"><button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button><b>{month.getFullYear()} 年 {month.getMonth() + 1} 月</b><button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button></div><div className="picker-calendar-week">{['日','一','二','三','四','五','六'].map((label) => <span key={label}>{label}</span>)}</div><div className="picker-calendar-grid">{calendarCells.map((day, index) => day ? <button type="button" key={day} className={date === `${month.getFullYear()}-${padNumber(month.getMonth() + 1)}-${padNumber(day)}` ? 'calendar-picker-day active' : 'calendar-picker-day'} onClick={() => commit(`${month.getFullYear()}-${padNumber(month.getMonth() + 1)}-${padNumber(day)}`, time)}>{day}</button> : <span key={`empty-${index}`} />)}</div><div className="picker-time-title"><Clock3 size={14} />選擇時間</div><TimeWheels value={time} options={timeOptions} onChange={(nextTime) => commit(date, nextTime)} /><button type="button" className="picker-done" onClick={() => setOpen(false)}>完成</button></div>}</div>
+  useEffect(() => {
+    if (step === 'time') timeHeading.current?.focus({ preventScroll: true })
+  }, [step])
+
+  const start = () => {
+    setDate(initial.date)
+    setTime(timeOptions.includes(initial.time) ? initial.time : `${initial.time.slice(0, 2)}:${padNumber(Math.floor(Number(initial.time.slice(3)) / 15) * 15)}`)
+    setMonth(initial.month)
+    setStep('date')
+    setOpen(true)
+  }
+  const dismiss = () => setOpen(false)
+  const displayValue = `${initial.date.replaceAll('-', '/')} ${initial.time}`
+
+  return <div className="field">
+    <span>{label}</span>
+    <button type="button" className="custom-picker-trigger" aria-label={`${label} ${displayValue}`} aria-haspopup="dialog" aria-expanded={open} onClick={start}>
+      <CalendarDays size={15} /><span>{displayValue}</span><ChevronRight size={14} />
+    </button>
+    {open && <PickerDialog label={label} onDismiss={dismiss}>
+      <div className="picker-header">
+        <div>
+          <b tabIndex={-1} ref={timeHeading}>{step === 'date' ? '選擇日期' : '選擇時間'}</b>
+          <small>{step === 'date' ? label : `${date.replaceAll('-', '/')}・每 15 分鐘`}</small>
+        </div>
+        <button type="button" className="picker-control" aria-label="取消選擇" onClick={dismiss}><X size={18} /></button>
+      </div>
+      {step === 'date' ? <>
+        <div className="picker-calendar-head">
+          <button type="button" className="picker-control" aria-label="上個月" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}>‹</button>
+          <b>{year} 年 {monthIndex + 1} 月</b>
+          <button type="button" className="picker-control" aria-label="下個月" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}>›</button>
+        </div>
+        <div className="picker-calendar-week">{['日', '一', '二', '三', '四', '五', '六'].map((day) => <span key={day}>{day}</span>)}</div>
+        <div className="picker-calendar-grid">
+          {Array.from({ length: firstDay }, (_, index) => <span key={`empty-${index}`} />)}
+          {Array.from({ length: daysInMonth }, (_, index) => {
+            const day = index + 1
+            const dayValue = localDate(new Date(year, monthIndex, day))
+            return <button type="button" key={day} aria-pressed={date === dayValue} className="calendar-picker-day" onClick={() => { setDate(dayValue); setStep('time') }}>{day}</button>
+          })}
+        </div>
+      </> : <>
+        <TimeWheels value={time} onChange={setTime} />
+        <div className="picker-actions">
+          <button type="button" className="picker-done" onClick={() => setStep('date')}>返回選日期</button>
+          <button type="button" className="picker-done confirm" onClick={() => { onChange(`${date}T${time}`); dismiss() }}>完成</button>
+        </div>
+      </>}
+    </PickerDialog>}
+  </div>
 }
 
 function ParentBookingPage({ notify, teacher }: { notify: (message: string) => void; teacher: TeacherProfile | null }) {
@@ -498,8 +577,8 @@ function WeeklyTimetableV2({ slots, onLongPress, onSlotClick, onBookingClick }: 
 }
 
 function SettingsTab({ settings, session, onProfileChange, reload, notify }: { settings: Settings; session: TeacherSession; onProfileChange: (session: TeacherSession) => void; reload: () => Promise<void>; notify: (message: string) => void }) {
-  const [open, setOpen] = useState(settings.bookingOpen.slice(0, 16))
-  const [close, setClose] = useState(settings.bookingClose.slice(0, 16))
+  const [open, setOpen] = useState(() => toLocalDateTime(settings.bookingOpen))
+  const [close, setClose] = useState(() => toLocalDateTime(settings.bookingClose))
   const [tagOptions, setTagOptions] = useState(settings.tagOptions ?? [])
   const [newTag, setNewTag] = useState('')
   const [editingTag, setEditingTag] = useState<string | null>(null)
@@ -510,11 +589,27 @@ function SettingsTab({ settings, session, onProfileChange, reload, notify }: { s
   const addTag = () => { const value = newTag.trim(); if (value && !tagOptions.includes(value)) { setTagOptions((current) => [...current, value]); setNewTag('') } }
   const removeTag = (tag: string) => setTagOptions((current) => current.filter((item) => item !== tag))
   const saveTagEdit = () => { const value = editingValue.trim(); if (!editingTag || !value || (tagOptions.includes(value) && value !== editingTag)) return; setTagOptions((current) => current.map((item) => item === editingTag ? value : item)); setRenamedLabels((current) => [...current, [editingTag, value]]); setEditingTag(null); setEditingValue('') }
-  const save = async () => { try { for (const [oldLabel, newLabel] of renamedLabels) await renameLocationLabel(oldLabel, newLabel, session.id); await saveSettings({ teacherId: session.id, bookingOpen: new Date(open).toISOString(), bookingClose: new Date(close).toISOString(), tagOptions }, session.id); setRenamedLabels([]); await reload(); notify('搶課時間與地區選項已更新') } catch (error) { notify(error instanceof Error ? error.message : '儲存失敗') } }
+  const save = async () => {
+    const start = new Date(open)
+    const end = new Date(close)
+    if (!(start < end)) {
+      notify('選課結束時間必須晚於開始時間')
+      return
+    }
+    try {
+      for (const [oldLabel, newLabel] of renamedLabels) await renameLocationLabel(oldLabel, newLabel, session.id)
+      await saveSettings({ teacherId: session.id, bookingOpen: start.toISOString(), bookingClose: end.toISOString(), tagOptions }, session.id)
+      setRenamedLabels([])
+      await reload()
+      notify('搶課時間與地區選項已更新')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '儲存失敗')
+    }
+  }
   const saveProfile = async () => { try { const updated = await updateTeacherProfile(session.id, displayName); onProfileChange(updated); notify('教師名稱已更新') } catch (error) { notify(error instanceof Error ? error.message : '教師名稱更新失敗') } }
   const linkFor = (mode: 'book' | 'register' | 'availability') => publicLink(session.slug, mode)
   const copyLink = async (mode: 'book' | 'register' | 'availability') => { await navigator.clipboard?.writeText(linkFor(mode)); setCopiedLink(mode); notify(mode === 'book' ? '家長選課連結已複製' : mode === 'register' ? '新生登記連結已複製' : '老師空堂連結已複製') }
-  return <div className="tab-content"><div className="panel settings-panel"><div className="eyebrow">TEACHER PROFILE · {session.displayName}</div><h2>教師設定</h2><p>設定家長看到的老師名稱、學期選課期間、專屬連結與可使用的上課地區。</p><div className="profile-name-row"><Field label="教師名稱"><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：林老師" /></Field><button className="button quiet" onClick={saveProfile}>儲存名稱</button></div><div className="eyebrow settings-section-label">TERM BOOKING WINDOW</div><h2>設定本學期選課開放期間</h2><p>學期初設定一次；家長選到的時段會成為日後固定的星期與時間。</p><div className="form-grid two"><Field label="開始時間"><DateTimePicker value={open} onChange={setOpen} /></Field><Field label="結束時間"><DateTimePicker value={close} onChange={setClose} /></Field></div><div className="link-panel"><div className="settings-subheading"><div><b>老師專屬家長連結</b><small>只會顯示這位老師的頁面，不會顯示管理入口。</small></div></div><div className="link-row"><div><b>家長選課</b><code>{linkFor('book')}</code></div><button className="copy-link-button" onClick={() => copyLink('book')}>{copiedLink === 'book' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'book' ? '已複製' : '複製連結'}</button></div><div className="link-row"><div><b>老師空堂</b><code>{linkFor('availability')}</code></div><button className="copy-link-button" onClick={() => copyLink('availability')}>{copiedLink === 'availability' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'availability' ? '已複製' : '複製連結'}</button></div><div className="link-row"><div><b>新生登記</b><code>{linkFor('register')}</code></div><button className="copy-link-button" onClick={() => copyLink('register')}>{copiedLink === 'register' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'register' ? '已複製' : '複製連結'}</button></div></div><div className="tag-settings"><div className="settings-subheading"><div><b>上課地區選項</b><small>學生檔案只使用地區標籤，可新增、編輯或刪除。</small></div></div><div className="tag-list">{tagOptions.map((tag) => editingTag === tag ? <span className="managed-tag editing" key={tag}><input value={editingValue} onChange={(event) => setEditingValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveTagEdit() }} /><button type="button" onClick={saveTagEdit} aria-label="儲存地區"><Check size={13} /></button><button type="button" onClick={() => setEditingTag(null)} aria-label="取消編輯"><X size={13} /></button></span> : <span className="managed-tag" key={tag}>{tag}<button type="button" onClick={() => { setEditingTag(tag); setEditingValue(tag) }} aria-label={`編輯${tag}`}><Pencil size={13} /></button><button type="button" onClick={() => removeTag(tag)} aria-label={`刪除${tag}`}><X size={13} /></button></span>)}</div><div className="add-tag-row"><input value={newTag} onChange={(event) => setNewTag(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTag() } }} placeholder="例如：內湖、松山、線上" /><button className="button quiet" type="button" onClick={addTag}><Plus size={15} /> 新增地區</button></div></div><button className="button primary" onClick={save}>儲存設定 <Check size={17} /></button></div><div className="panel security-panel"><ShieldCheck size={21} /><div><h3>權限與個資</h3><p>老師後台使用 Supabase Auth 登入；家長端只透過公開 RPC 取得已驗證學生的可選時段。</p></div></div></div>
+  return <div className="tab-content"><div className="panel settings-panel"><div className="eyebrow">TEACHER PROFILE · {session.displayName}</div><h2>教師設定</h2><p>設定家長看到的老師名稱、學期選課期間、專屬連結與可使用的上課地區。</p><div className="profile-name-row"><Field label="教師名稱"><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：林老師" /></Field><button className="button quiet" onClick={saveProfile}>儲存名稱</button></div><div className="eyebrow settings-section-label">TERM BOOKING WINDOW</div><h2>設定本學期選課開放期間</h2><p>學期初設定一次；家長選到的時段會成為日後固定的星期與時間。</p><div className="form-grid two"><DateTimePicker label="開始時間" value={open} onChange={setOpen} /><DateTimePicker label="結束時間" value={close} onChange={setClose} /></div><div className="link-panel"><div className="settings-subheading"><div><b>老師專屬家長連結</b><small>只會顯示這位老師的頁面，不會顯示管理入口。</small></div></div><div className="link-row"><div><b>家長選課</b><code>{linkFor('book')}</code></div><button className="copy-link-button" onClick={() => copyLink('book')}>{copiedLink === 'book' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'book' ? '已複製' : '複製連結'}</button></div><div className="link-row"><div><b>老師空堂</b><code>{linkFor('availability')}</code></div><button className="copy-link-button" onClick={() => copyLink('availability')}>{copiedLink === 'availability' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'availability' ? '已複製' : '複製連結'}</button></div><div className="link-row"><div><b>新生登記</b><code>{linkFor('register')}</code></div><button className="copy-link-button" onClick={() => copyLink('register')}>{copiedLink === 'register' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'register' ? '已複製' : '複製連結'}</button></div></div><div className="tag-settings"><div className="settings-subheading"><div><b>上課地區選項</b><small>學生檔案只使用地區標籤，可新增、編輯或刪除。</small></div></div><div className="tag-list">{tagOptions.map((tag) => editingTag === tag ? <span className="managed-tag editing" key={tag}><input value={editingValue} onChange={(event) => setEditingValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveTagEdit() }} /><button type="button" onClick={saveTagEdit} aria-label="儲存地區"><Check size={13} /></button><button type="button" onClick={() => setEditingTag(null)} aria-label="取消編輯"><X size={13} /></button></span> : <span className="managed-tag" key={tag}>{tag}<button type="button" onClick={() => { setEditingTag(tag); setEditingValue(tag) }} aria-label={`編輯${tag}`}><Pencil size={13} /></button><button type="button" onClick={() => removeTag(tag)} aria-label={`刪除${tag}`}><X size={13} /></button></span>)}</div><div className="add-tag-row"><input value={newTag} onChange={(event) => setNewTag(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTag() } }} placeholder="例如：內湖、松山、線上" /><button className="button quiet" type="button" onClick={addTag}><Plus size={15} /> 新增地區</button></div></div><button className="button primary" onClick={save}>儲存設定 <Check size={17} /></button></div><div className="panel security-panel"><ShieldCheck size={21} /><div><h3>權限與個資</h3><p>老師後台使用 Supabase Auth 登入；家長端只透過公開 RPC 取得已驗證學生的可選時段。</p></div></div></div>
 }
 
 function SettingsTabLegacy({ settings, session, onProfileChange, reload, notify }: { settings: Settings; session: TeacherSession; onProfileChange: (session: TeacherSession) => void; reload: () => Promise<void>; notify: (message: string) => void }) {
