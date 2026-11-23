@@ -617,11 +617,9 @@ function SettingsTab({ settings, session, onProfileChange, onSettingsChange, rel
   const [savingSection, setSavingSection] = useState<SettingsSection | null>(null)
   const [open, setOpen] = useState(() => toLocalDateTime(settings.bookingOpen))
   const [close, setClose] = useState(() => toLocalDateTime(settings.bookingClose))
-  const [tagOptions, setTagOptions] = useState(settings.tagOptions)
   const [newTag, setNewTag] = useState('')
   const [editingTag, setEditingTag] = useState<string | null>(null)
   const [editingValue, setEditingValue] = useState('')
-  const [renamedLabels, setRenamedLabels] = useState<Array<[string, string]>>([])
   const [displayName, setDisplayName] = useState(session.displayName)
   const [copiedLink, setCopiedLink] = useState<'book' | 'register' | 'availability' | null>(null)
   const confirmationKey = `bookingclass:share-settings-confirmed:${session.id}`
@@ -640,22 +638,50 @@ function SettingsTab({ settings, session, onProfileChange, onSettingsChange, rel
   }
   const windowError = getWindowError()
   const showLinks = linksConfirmed && savingSection !== 'booking' && !windowError && startUnchanged && endUnchanged
+  const { tagOptions } = settings
 
-  const addTag = () => {
-    const value = newTag.trim()
-    if (!value || tagOptions.includes(value)) return
-    setTagOptions((current) => [...current, value])
-    setNewTag('')
+  const saveTagOptions = async (nextTags: string[], message: string) => {
+    if (savingSection) return false
+    setSavingSection('regions')
+    try {
+      onSettingsChange(await saveSettings({ tagOptions: nextTags }, session.id))
+      notify(message)
+      return true
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '地點標籤儲存失敗')
+      return false
+    } finally {
+      setSavingSection(null)
+    }
   }
 
-  const confirmTagEdit = () => {
+  const addTag = async (event: FormEvent) => {
+    event.preventDefault()
+    const value = newTag.trim()
+    if (!value || tagOptions.includes(value)) return
+    if (await saveTagOptions([...tagOptions, value], '已新增地區')) setNewTag('')
+  }
+
+  const confirmTagEdit = async () => {
     const value = editingValue.trim()
-    if (!editingTag || !value || (value !== editingTag && tagOptions.includes(value))) return
-    if (value !== editingTag) {
-      setTagOptions((current) => current.map((tag) => tag === editingTag ? value : tag))
-      setRenamedLabels((current) => [...current, [editingTag, value]])
+    if (savingSection || !editingTag || !value) return
+    if (value === editingTag) {
+      setEditingTag(null)
+      return
     }
-    setEditingTag(null)
+    if (tagOptions.includes(value)) return
+    setSavingSection('regions')
+    try {
+      await renameLocationLabel(editingTag, value, session.id)
+      onSettingsChange({ ...settings, tagOptions: tagOptions.map((tag) => tag === editingTag ? value : tag) })
+      setEditingTag(null)
+      await reload()
+      notify('地點標籤已改名')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '地點標籤改名失敗')
+    } finally {
+      setSavingSection(null)
+    }
   }
 
   const saveProfile = async (event: FormEvent) => {
@@ -669,24 +695,6 @@ function SettingsTab({ settings, session, onProfileChange, onSettingsChange, rel
       notify('教師名稱已更新')
     } catch (error) {
       notify(error instanceof Error ? error.message : '教師名稱更新失敗')
-    } finally {
-      setSavingSection(null)
-    }
-  }
-
-  const saveRegions = async () => {
-    if (savingSection || editingTag) return
-    setSavingSection('regions')
-    try {
-      for (const [oldLabel, newLabel] of renamedLabels) {
-        await renameLocationLabel(oldLabel, newLabel, session.id)
-        setRenamedLabels((current) => current.slice(1))
-      }
-      onSettingsChange(await saveSettings({ tagOptions }, session.id))
-      if (renamedLabels.length) await reload()
-      notify('地點標籤已儲存')
-    } catch (error) {
-      notify(error instanceof Error ? error.message : '地點標籤儲存失敗')
     } finally {
       setSavingSection(null)
     }
@@ -768,25 +776,22 @@ function SettingsTab({ settings, session, onProfileChange, onSettingsChange, rel
     <section className="panel settings-panel" id="settings-panel-regions" role="tabpanel" aria-labelledby="settings-tab-regions" hidden={section !== 'regions'}>
       <h2>地點標籤</h2>
       <p>地點標籤可用於學生檔案和課表限區。</p>
-      <fieldset className="settings-fields" disabled={savingSection === 'regions'}>
+      <fieldset className="settings-fields" disabled={Boolean(savingSection)} aria-busy={savingSection === 'regions'}>
         <div className="tag-list">{tagOptions.map((tag) => editingTag === tag
           ? <span className="managed-tag editing" key={tag}>
-            <input aria-label="新標籤名稱" value={editingValue} onChange={(event) => setEditingValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') confirmTagEdit() }} />
-            <button type="button" onClick={confirmTagEdit} aria-label="確認改名"><Check size={13} /></button>
+            <input aria-label="新標籤名稱" value={editingValue} onChange={(event) => setEditingValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) void confirmTagEdit() }} />
+            <button type="button" onClick={() => void confirmTagEdit()} aria-label="確認改名" disabled={!editingValue.trim() || (editingValue.trim() !== tag && tagOptions.includes(editingValue.trim()))}><Check size={13} /></button>
             <button type="button" onClick={() => setEditingTag(null)} aria-label="取消編輯"><X size={13} /></button>
           </span>
           : <span className="managed-tag" key={tag}>
             {tag}
             <button type="button" onClick={() => { setEditingTag(tag); setEditingValue(tag) }} aria-label={`編輯${tag}`}><Pencil size={13} /></button>
-            <button type="button" onClick={() => setTagOptions((current) => current.filter((item) => item !== tag))} aria-label={`刪除${tag}`}><X size={13} /></button>
+            <button type="button" onClick={() => void saveTagOptions(tagOptions.filter((item) => item !== tag), '已刪除地點標籤')} aria-label={`刪除${tag}`}><X size={13} /></button>
           </span>)}</div>
-        <div className="add-tag-row">
-          <input aria-label="新增地點標籤" value={newTag} onChange={(event) => setNewTag(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addTag() }} placeholder="例如：內湖、松山、線上" />
-          <button className="button quiet" type="button" onClick={addTag}><Plus size={15} /> 新增地區</button>
-        </div>
-        <button className="button primary settings-save-regions" type="button" onClick={() => void saveRegions()} disabled={Boolean(savingSection) || Boolean(editingTag)}>
-          {savingSection === 'regions' ? '儲存中…' : '儲存地點標籤'} <Check size={17} />
-        </button>
+        <form className="add-tag-row" onSubmit={addTag}>
+          <input aria-label="新增地點標籤" value={newTag} onChange={(event) => setNewTag(event.target.value)} placeholder="例如：內湖、松山、線上" required />
+          <button className="button primary" type="submit" disabled={!newTag.trim() || tagOptions.includes(newTag.trim()) || Boolean(editingTag)}><Plus size={15} /> 新增地區</button>
+        </form>
       </fieldset>
     </section>
     <section className="panel settings-panel" id="settings-panel-booking" role="tabpanel" aria-labelledby="settings-tab-booking" hidden={section !== 'booking'}>

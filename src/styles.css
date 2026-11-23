@@ -688,7 +688,6 @@ body:has(.picker-dialog[open]) { overflow:hidden; }
 .settings-layout .settings-panel { border-radius:0 12px 12px 12px; }
 .settings-layout .settings-panel h2 { margin-top:0; }
 .settings-fields { min-width:0; margin:0; padding:0; border:0; }
-.settings-save-regions { margin-top:18px; }
 .settings-layout .link-panel { padding-bottom:0; }
 .settings-layout .settings-subheading { margin-bottom:8px; }
 

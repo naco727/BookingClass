@@ -12,7 +12,7 @@ const readMock = <T,>(key: string, fallback: T): T => {
 const legacyStudentTagOptions = new Set(['數學', '英文', '會考', '固定週課', '需帶講義', '重點追蹤'])
 const normalizeMockSettings = (settings: Record<string, Settings>) => Object.fromEntries(Object.entries(settings).map(([teacherId, setting]) => {
   const options = Array.from(new Set((setting.tagOptions ?? []).filter((item) => !legacyStudentTagOptions.has(item))))
-  return [teacherId, { ...setting, tagOptions: options.length ? options : ['天母', '北投', '士林'] }]
+  return [teacherId, { ...setting, tagOptions: options.length || setting.tagOptions?.length === 0 ? options : ['天母', '北投', '士林'] }]
 })) as Record<string, Settings>
 const db = {
   teachers: readMock('teachers', demoTeachers),
@@ -377,6 +377,8 @@ export async function renameLocationLabel(oldLabel: string, newLabel: string, te
   db.students.forEach((student) => { if (student.teacherId === teacherId && student.region === oldLabel) student.region = newLabel })
   db.slots.forEach((slot) => { if (slot.teacherId === teacherId && slot.presetRegion === oldLabel) slot.presetRegion = newLabel })
   db.bookings.forEach((booking) => { if (booking.teacherId === teacherId && booking.region === oldLabel) booking.region = newLabel })
+  const settings = mockSettingsFor(teacherId)
+  db.settings[teacherId] = { ...settings, tagOptions: settings.tagOptions.map((tag) => tag === oldLabel ? newLabel : tag) }
   persistMock()
 }
 
