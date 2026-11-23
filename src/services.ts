@@ -80,16 +80,30 @@ export async function getPublicTeacher(slug: string): Promise<TeacherProfile | n
   return clone(db.teachers.find((teacher) => teacher.slug === slug) ?? null)
 }
 
-export async function submitRegistration(input: Omit<Registration, 'id' | 'teacherId' | 'createdAt' | 'status'>, teacherId: string): Promise<Registration> {
+type RegistrationReceipt = Pick<Registration, 'id' | 'createdAt'>
+
+export async function submitRegistration(input: Omit<Registration, 'id' | 'teacherId' | 'createdAt' | 'status'>, teacherId: string): Promise<RegistrationReceipt> {
   if (supabase) {
-    const { data, error } = await supabase.from('student_registrations').insert({ ...input, teacher_id: teacherId, status: 'pending' }).select('*').single()
-    if (error) throw error
-    return normalizeRegistration(data)
+    const { data, error } = await supabase.rpc('public_submit_registration', {
+      p_teacher_id: teacherId,
+      p_name: input.name,
+      p_grade: input.grade,
+      p_school: input.school,
+      p_focus: input.focus,
+      p_location: input.location,
+      p_phone: input.phone,
+      p_material: input.material,
+      p_note: input.note ?? null,
+    }).single<{ registration_id: string; submitted_at: string }>()
+    if (error?.message === 'registration_unavailable') throw new Error('此老師目前未開放新生登記，請確認連結或聯絡老師。')
+    if (error && ['23514', '23502', '22P02'].includes(error.code)) throw new Error('請確認必填欄位都已填寫，並縮短過長的內容。')
+    if (error) throw new Error('送出失敗，請稍後再試。')
+    return { id: data.registration_id, createdAt: data.submitted_at }
   }
   const row: Registration = { ...input, teacherId, id: `reg-${Date.now()}`, createdAt: new Date().toISOString(), status: 'pending' }
   db.registrations.unshift(row)
   persistMock()
-  return clone(row)
+  return { id: row.id, createdAt: row.createdAt }
 }
 
 export async function listRegistrations(teacherId: string): Promise<Registration[]> {

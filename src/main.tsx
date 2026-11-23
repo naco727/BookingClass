@@ -84,14 +84,27 @@ function Home({ onNavigate }: { onNavigate: (view: View) => void }) {
 function Feature({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) { return <div className="feature-card"><div className="icon-box">{icon}</div><h3>{title}</h3><p>{text}</p></div> }
 
 function RegistrationPage({ notify, teacher }: { notify: (message: string) => void; teacher: TeacherProfile | null }) {
-  const [submitted, setSubmitted] = useState(false)
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ name: '', grade: '', school: '', focus: '', location: '', phone: '', material: '自編' as const, note: '' })
   const update = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }))
-  const onSubmit = async (event: FormEvent) => { event.preventDefault(); setLoading(true); try { await submitRegistration(form, teacher?.id ?? 'teacher-a'); setSubmitted(true); notify('已送出新生登記'); } catch (error) { notify(error instanceof Error ? error.message : '送出失敗') } finally { setLoading(false) } }
+  const onSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (loading) return
+    setLoading(true)
+    try {
+      const receipt = await submitRegistration(form, teacher?.id ?? 'teacher-a')
+      setSubmittedAt(receipt.createdAt)
+      notify('已送出新生登記')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '送出失敗')
+    } finally {
+      setLoading(false)
+    }
+  }
   const copyReminder = async () => { const message = `老師好，我已完成新生登記。再麻煩確認謝謝。\n學生姓名：${form.name}`; await navigator.clipboard?.writeText(message); setCopied(true); notify('提醒文字已複製，可貼到 LINE 傳給老師') }
-  if (submitted) return <div className="page-width centered-page"><div className="success-card"><div className="success-icon"><Check /></div><div className="eyebrow">REGISTRATION RECEIVED</div><h1>資料已收到，<br /><em>接下來交給老師。</em></h1><p>已記錄學生資訊，請等候老師審核與回覆。<br />老師完成建檔後，會再通知您開始選課。</p><div className="receipt"><span>登記時間</span><b>{formatTimestamp(new Date().toISOString())}</b></div><div className="reminder-card"><div><b>傳給老師做提醒</b><small>複製後貼到 LINE 或訊息中</small></div><button className="copy-message-button" onClick={copyReminder}>{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? '已複製' : '複製提醒文字'}</button><pre>老師好，我已完成新生登記。再麻煩確認謝謝。{`\n`}學生姓名：{form.name}</pre></div><button className="button primary" onClick={() => { setSubmitted(false); setCopied(false) }}>再登記一位學生</button></div></div>
+  if (submittedAt) return <div className="page-width centered-page"><div className="success-card"><div className="success-icon"><Check /></div><div className="eyebrow">REGISTRATION RECEIVED</div><h1>資料已收到，<br /><em>接下來交給老師。</em></h1><p>已記錄學生資訊，請等候老師審核與回覆。<br />老師完成建檔後，會再通知您開始選課。</p><div className="receipt"><span>登記時間</span><b>{formatTimestamp(submittedAt)}</b></div><div className="reminder-card"><div><b>傳給老師做提醒</b><small>複製後貼到 LINE 或訊息中</small></div><button className="copy-message-button" onClick={copyReminder}>{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? '已複製' : '複製提醒文字'}</button><pre>老師好，我已完成新生登記。再麻煩確認謝謝。{`\n`}學生姓名：{form.name}</pre></div><button className="button primary" onClick={() => { setSubmittedAt(null); setCopied(false) }}>再登記一位學生</button></div></div>
   return <div className="page-width form-page"><div className="page-heading"><div><div className="eyebrow">NEW STUDENT / 01</div><h1>先讓我們認識<br /><em>你的孩子。</em></h1></div><p>填寫後送出，老師會在確認學生資訊與地區後，建立正式檔案。</p></div><form className="form-card" onSubmit={onSubmit}><div className="form-section"><div className="section-number">01</div><div className="form-section-content"><h2>學生基本資料</h2><p className="helper">這些資訊只會提供給老師查看。</p><div className="form-grid two"><Field label="學生姓名" required><input required value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="例如：陳昀安" /></Field><Field label="年級" required><select required value={form.grade} onChange={(e) => update('grade', e.target.value)}><option value="">請選擇年級</option>{['小一','小二','小三','小四','小五','小六','國一','國二','國三','高一','高二','高三'].map((grade) => <option key={grade}>{grade}</option>)}</select></Field></div><div className="form-grid two"><Field label="學校" required><input required value={form.school} onChange={(e) => update('school', e.target.value)} placeholder="例如：蘭雅國中" /></Field><Field label="欲加強項目" required><input required value={form.focus} onChange={(e) => update('focus', e.target.value)} placeholder="例如：數學、理化" /></Field></div></div></div><div className="form-section"><div className="section-number">02</div><div className="form-section-content"><h2>上課與聯絡</h2><p className="helper">請填寫完整上課地址（不用填樓層）；地區會由老師審核後標記。</p><div className="form-grid two"><Field label="詳盡地址（無須樓層）" required><input required value={form.location} onChange={(e) => update('location', e.target.value)} placeholder="例如：台北市士林區中山北路六段 123 號" /></Field><Field label="家長聯絡電話" required><input required type="tel" value={form.phone} onChange={(e) => update('phone', e.target.value)} placeholder="0912-345-678" /></Field></div><Field label="講義安排" required><div className="choice-row">{(['自編','已有','購買市售'] as const).map((item) => <label className={form.material === item ? 'choice selected' : 'choice'} key={item}><input type="radio" name="material" checked={form.material === item} onChange={() => update('material', item)} />{item}</label>)}</div></Field><Field label="給老師的備註"><textarea value={form.note} onChange={(e) => update('note', e.target.value)} placeholder="有想特別告訴老師的事嗎？（選填）" rows={3} /></Field></div></div><div className="form-submit"><span><ShieldCheck size={16} /> 資料會安全留存，僅供課務使用</span><button className="button primary" disabled={loading}>{loading ? '送出中…' : '送出新生登記'} <ChevronRight size={17} /></button></div></form></div>
 }
 
