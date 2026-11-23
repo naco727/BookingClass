@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { CalendarDays, Check, ChevronRight, Clock3, Copy, DoorOpen, GraduationCap, LogIn, MapPin, Menu, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import './styles.css'
 import { supabase } from './supabase'
-import { addSlot, approveRegistration, bookSelections, cancelBooking, deleteRegistration, deleteSlot, deleteStudent, getCurrentTeacherSession, getParentAvailability, getPublicBookingStatus, getPublicTeacher, getSettings, getTeacherAvailability, listRegistrations, listSlots, listStudents, lookupStudents, renameLocationLabel, saveSettings, submitRegistration, teacherBookExistingStudent, teacherCreateBooking, teacherSignIn, teacherSignOut, updateBooking, updateSlot, updateStudent, updateTeacherPassword, updateTeacherProfile } from './services'
+import { addSlot, approveRegistration, bookSelections, cancelBooking, deleteRegistration, deleteSlot, deleteStudent, getCurrentTeacherSession, getParentAvailability, getPublicBookingStatus, getPublicTeacher, getSettings, getTeacherAvailability, listRegistrations, listSlots, listStudents, lookupStudents, renameLocationLabel, saveSettings, submitRegistration, teacherAddStudent, teacherBookExistingStudent, teacherCreateBooking, teacherSignIn, teacherSignOut, updateBooking, updateSlot, updateStudent, updateTeacherPassword, updateTeacherProfile } from './services'
 import type { AvailabilitySlot, Booking, BookingSelection, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, TeacherProfile, TeacherSession, Weekday } from './types'
 
 type View = 'home' | 'register' | 'book' | 'teacher'
@@ -372,12 +372,16 @@ function FlowStep({ num, title, text, done, active }: { num: string; title: stri
 
 function StudentsTab({ registrations, students, tagOptions, teacherId, reload, notify }: { registrations: Registration[]; students: Student[]; tagOptions: string[]; teacherId: string; reload: () => Promise<void>; notify: (message: string) => void }) {
   const [filter, setFilter] = useState<'pending' | 'students'>('pending')
-  const [editing, setEditing] = useState<Student | null>(null)
+  const [editing, setEditing] = useState<Student | 'new' | null>(null)
   const [viewing, setViewing] = useState<Student | null>(null)
   const [reviewing, setReviewing] = useState<Registration | null>(null)
   const pending = registrations.filter((item) => item.status === 'pending')
-  const review = async (id: string) => { try { await approveRegistration(id, teacherId); await reload(); notify('已通過審核並建立正式學生檔案') } catch (error) { notify(error instanceof Error ? error.message : '審核失敗') } }
-  return <div className="tab-content"><div className="tab-switch"><button className={filter === 'pending' ? 'active' : ''} onClick={() => setFilter('pending')}>待審核 <b>{pending.length}</b></button><button className={filter === 'students' ? 'active' : ''} onClick={() => setFilter('students')}>正式學生 <b>{students.length}</b></button></div>{filter === 'pending' ? <div className="panel table-panel"><div className="table-heading"><div><h2>待審核的新生</h2><p>清單先顯示姓名與手機，點選查看詳情可查看家長填寫的完整資訊。</p></div></div><div className="data-table pending-table"><div className="table-row table-header pending-row"><span>學生姓名</span><span>手機號碼</span><span>操作</span></div>{pending.map((item) => <div className="table-row pending-row" key={item.id}><span><b>{item.name}</b></span><span>{item.phone}</span><span className="table-actions"><button className="small-button" onClick={() => setReviewing(item)}><Pencil size={14} /> 查看詳情</button></span></div>)}{!pending.length && <div className="empty-inline">目前沒有待審核資料</div>}</div></div> : <div className="student-cards">{students.map((student) => <div className="student-card student-card-clickable" key={student.id} onClick={() => setViewing(student)}><div className="student-card-head"><span className="avatar">{student.name.slice(0, 1)}</span><div><h3>{student.name}</h3><p>{student.school} · {student.grade}</p></div><button type="button" className="small-button" onClick={(event) => { event.stopPropagation(); setViewing(student) }}>查看個資</button></div><div className="student-details"><span><b>地區</b><em className={student.region ? 'region-badge' : 'unassigned'}>{student.region ?? '尚未標記'}</em></span></div></div>)}</div>}{viewing && <StudentViewModal student={viewing} tagOptions={tagOptions} teacherId={teacherId} close={() => setViewing(null)} editProfile={() => { setViewing(null); setEditing(viewing) }} reload={reload} notify={notify} />}{editing && <StudentEditor student={editing} tagOptions={tagOptions} teacherId={teacherId} close={() => setEditing(null)} reload={reload} notify={notify} />}{reviewing && <RegistrationReviewModal registration={reviewing} teacherId={teacherId} close={() => setReviewing(null)} reload={reload} notify={notify} />}</div>
+  return <div className="tab-content">
+    <div className="students-toolbar">
+      <div className="tab-switch"><button className={filter === 'pending' ? 'active' : ''} onClick={() => setFilter('pending')}>待審核 <b>{pending.length}</b></button><button className={filter === 'students' ? 'active' : ''} onClick={() => setFilter('students')}>正式學生 <b>{students.length}</b></button></div>
+      {filter === 'students' && <button type="button" className="small-button add-student-button" onClick={() => setEditing('new')}><Plus size={15} />新增現有學生</button>}
+    </div>
+    {filter === 'pending' ? <div className="panel table-panel"><div className="table-heading"><div><h2>待審核的新生</h2><p>清單先顯示姓名與手機，點選查看詳情可查看家長填寫的完整資訊。</p></div></div><div className="data-table pending-table"><div className="table-row table-header pending-row"><span>學生姓名</span><span>手機號碼</span><span>操作</span></div>{pending.map((item) => <div className="table-row pending-row" key={item.id}><span><b>{item.name}</b></span><span>{item.phone}</span><span className="table-actions"><button className="small-button" onClick={() => setReviewing(item)}><Pencil size={14} /> 查看詳情</button></span></div>)}{!pending.length && <div className="empty-inline">目前沒有待審核資料</div>}</div></div> : <div className="student-cards">{students.map((student) => <div className="student-card student-card-clickable" key={student.id} onClick={() => setViewing(student)}><div className="student-card-head"><span className="avatar">{student.name.slice(0, 1)}</span><div><h3>{student.name}</h3><p>{student.school} · {student.grade}</p></div><button type="button" className="small-button" onClick={(event) => { event.stopPropagation(); setViewing(student) }}>查看個資</button></div><div className="student-details"><span><b>地區</b><em className={student.region ? 'region-badge' : 'unassigned'}>{student.region ?? '尚未標記'}</em></span></div></div>)}</div>}{viewing && <StudentViewModal student={viewing} tagOptions={tagOptions} teacherId={teacherId} close={() => setViewing(null)} editProfile={() => { setViewing(null); setEditing(viewing) }} reload={reload} notify={notify} />}{editing && <StudentEditor student={editing === 'new' ? undefined : editing} tagOptions={tagOptions} teacherId={teacherId} close={() => setEditing(null)} reload={reload} notify={notify} />}{reviewing && <RegistrationReviewModal registration={reviewing} teacherId={teacherId} close={() => setReviewing(null)} reload={reload} notify={notify} />}</div>
 }
 
 function StudentViewModal({ student, tagOptions, teacherId, close, editProfile, reload, notify }: { student: Student; tagOptions: string[]; teacherId: string; close: () => void; editProfile: () => void; reload: () => Promise<void>; notify: (message: string) => void }) {
@@ -400,19 +404,103 @@ function StudentViewModal({ student, tagOptions, teacherId, close, editProfile, 
   return <div className="modal-backdrop"><div className="modal student-view-modal"><button type="button" className="modal-close" onClick={close}><X /></button><div className="student-view-top"><div><div className="eyebrow">STUDENT PROFILE</div><h2>{student.name}</h2></div><button type="button" className="small-button" onClick={editProfile}><Pencil size={14} /> 編輯個資</button></div><div className="review-grid"><div><b>年級</b><span>{student.grade || '—'}</span></div><div><b>學校</b><span>{student.school || '—'}</span></div><div><b>家長聯絡方式</b><span>{student.phone || '—'}</span></div><div><b>欲加強項目</b><span>{student.focus || '—'}</span></div><div className="review-note"><b>詳盡地址</b><span>{student.location || '—'}</span></div><div><b>講義安排</b><span>{student.material || '—'}</span></div></div><div className="student-region-editor"><div><b>上課地區</b><small>檢視頁面只能修改地區標示。</small></div><div className="region-choice-grid"><button type="button" className={!region ? 'region-choice selected' : 'region-choice'} onClick={() => setRegion(null)}>尚未標記</button>{regionOptions.map((item) => <button type="button" key={item} className={region === item ? 'region-choice selected' : 'region-choice'} onClick={() => setRegion(item)}>{item}</button>)}</div></div><div className="modal-actions"><button type="button" className="button quiet" onClick={close}>關閉</button><button type="button" className="button primary" disabled={saving} onClick={() => void saveRegion()}>{saving ? '儲存中…' : '儲存地區'}</button></div></div></div>
 }
 
-function StudentEditor({ student, tagOptions, teacherId, close, reload, notify }: { student: Student; tagOptions: string[]; teacherId: string; close: () => void; reload: () => Promise<void>; notify: (message: string) => void }) {
-  const [name, setName] = useState(student.name)
-  const [grade, setGrade] = useState(student.grade)
-  const [school, setSchool] = useState(student.school)
-  const [region, setRegion] = useState<Region | null>(student.region)
-  const [focus, setFocus] = useState(student.focus)
-  const [location, setLocation] = useState(student.location)
-  const [phone, setPhone] = useState(student.phone)
-  const [material, setMaterial] = useState<MaterialPlan>(student.material)
-  const regionOptions = Array.from(new Set([...tagOptions, ...(student.region ? [student.region] : [])]))
-  const save = async () => { if (![name, grade, school, focus, location, phone].every((value) => value.trim())) { notify('請完整填寫學生個資'); return } try { await updateStudent(student.id, { name: name.trim(), grade: grade.trim(), school: school.trim(), region, focus: focus.trim(), location: location.trim(), phone: phone.trim(), material }, teacherId); await reload(); close(); notify('學生個資已更新') } catch (error) { notify(error instanceof Error ? error.message : '儲存失敗') } }
-  const remove = async () => { if (!window.confirm(`確定要刪除 ${student.name} 的學生檔案與預約嗎？`)) return; try { await deleteStudent(student.id, teacherId); await reload(); close(); notify('學生與相關預約已刪除') } catch (error) { notify(error instanceof Error ? error.message : '刪除失敗') } }
-  return <div className="modal-backdrop"><div className="modal student-editor-modal"><button type="button" className="modal-close" onClick={close}><X /></button><div className="eyebrow">EDIT STUDENT PROFILE</div><h2>編輯個資</h2><div className="form-grid two"><Field label="學生姓名"><input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} /></Field><Field label="年級"><input value={grade} maxLength={40} onChange={(e) => setGrade(e.target.value)} /></Field><Field label="學校"><input value={school} maxLength={120} onChange={(e) => setSchool(e.target.value)} /></Field><Field label="家長聯絡方式"><input value={phone} maxLength={40} onChange={(e) => setPhone(e.target.value)} /></Field></div><Field label="欲加強項目"><input value={focus} maxLength={240} onChange={(e) => setFocus(e.target.value)} /></Field><Field label="詳盡地址"><input value={location} maxLength={240} onChange={(e) => setLocation(e.target.value)} /></Field><div className="form-grid two"><Field label="講義安排"><select value={material} onChange={(e) => setMaterial(e.target.value as MaterialPlan)}><option>自編</option><option>已有</option><option>購買市售</option></select></Field><Field label="上課地區"><div className="region-choice-grid"><button type="button" className={!region ? 'region-choice selected' : 'region-choice'} onClick={() => setRegion(null)}>尚未標記</button>{regionOptions.map((item) => <button type="button" key={item} className={region === item ? 'region-choice selected' : 'region-choice'} onClick={() => setRegion(item)}>{item}</button>)}</div></Field></div><small className="field-hint">地區選項可在「搶課設定」新增、刪除或重新命名。</small><div className="modal-actions"><button type="button" className="text-button danger delete-action" onClick={() => void remove()}><Trash2 size={15} /> 刪除學生</button><button type="button" className="button quiet" onClick={close}>取消</button><button type="button" className="button primary" onClick={() => void save()}>儲存個資</button></div></div></div>
+function StudentEditor({ student, tagOptions, teacherId, close, reload, notify }: {
+  student?: Student
+  tagOptions: string[]
+  teacherId: string
+  close: () => void
+  reload: () => Promise<void>
+  notify: (message: string) => void
+}) {
+  const [name, setName] = useState(student?.name ?? '')
+  const [grade, setGrade] = useState(student?.grade ?? '')
+  const [school, setSchool] = useState(student?.school ?? '')
+  const [region, setRegion] = useState<Region | null>(student?.region ?? null)
+  const [focus, setFocus] = useState(student?.focus ?? '')
+  const [location, setLocation] = useState(student?.location ?? '')
+  const [phone, setPhone] = useState(student?.phone ?? '')
+  const [material, setMaterial] = useState<MaterialPlan>(student?.material ?? '自編')
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
+  const regionOptions = Array.from(new Set([...tagOptions, ...(student?.region ? [student.region] : [])]))
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault()
+    if (saving) return
+    if (![name, grade, school, focus, location, phone].every((value) => value.trim())) {
+      setFormError('請完整填寫學生個資。')
+      return
+    }
+
+    const profile = {
+      name: name.trim(), grade: grade.trim(), school: school.trim(),
+      focus: focus.trim(), location: location.trim(), phone: phone.trim(),
+      material, region,
+    }
+    setSaving(true)
+    setFormError('')
+    try {
+      if (student) await updateStudent(student.id, profile, teacherId)
+      else await teacherAddStudent(profile, teacherId)
+      await reload()
+      close()
+      notify(student ? '學生個資已更新' : '已新增正式學生')
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : '儲存失敗，請稍後再試。')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async () => {
+    if (!student || saving || !window.confirm(`確定要刪除 ${student.name} 的學生檔案與預約嗎？`)) return
+    setSaving(true)
+    try {
+      await deleteStudent(student.id, teacherId)
+      await reload()
+      close()
+      notify('學生與相關預約已刪除')
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : '刪除失敗，請稍後再試。')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <div className="modal-backdrop">
+    <div className="modal student-editor-modal" role="dialog" aria-modal="true" aria-labelledby="student-editor-title">
+      <button type="button" className="modal-close" onClick={close} aria-label="關閉" disabled={saving}><X /></button>
+      <h2 id="student-editor-title">{student ? '編輯個資' : '新增現有學生'}</h2>
+      <form onSubmit={save}>
+        <fieldset className="settings-fields" disabled={saving}>
+          <div className="form-grid two">
+            <Field label="學生姓名" required><input required value={name} maxLength={80} onChange={(e) => setName(e.target.value)} /></Field>
+            <Field label="年級" required><input required value={grade} maxLength={40} onChange={(e) => setGrade(e.target.value)} /></Field>
+            <Field label="學校" required><input required value={school} maxLength={120} onChange={(e) => setSchool(e.target.value)} /></Field>
+            <Field label="家長聯絡方式" required><input type="tel" required value={phone} maxLength={40} onChange={(e) => setPhone(e.target.value)} /></Field>
+          </div>
+          <Field label="欲加強項目" required><input required value={focus} maxLength={240} onChange={(e) => setFocus(e.target.value)} /></Field>
+          <Field label="詳盡地址（無須樓層）" required><input required value={location} maxLength={240} onChange={(e) => setLocation(e.target.value)} /></Field>
+          <div className="form-grid two">
+            <Field label="講義安排"><select value={material} onChange={(e) => setMaterial(e.target.value as MaterialPlan)}><option>自編</option><option>已有</option><option>購買市售</option></select></Field>
+            <div className="field">
+              <span>上課地區</span>
+              <div className="region-choice-grid" role="group" aria-label="上課地區">
+                {[null, ...regionOptions].map((option) => <button type="button" key={option ?? ''} className={region === option ? 'region-choice selected' : 'region-choice'} aria-pressed={region === option} onClick={() => setRegion(option)}>{option ?? '尚未標記'}</button>)}
+              </div>
+            </div>
+          </div>
+          <small className="field-hint">可先建檔，標記上課地區後家長才能選課。</small>
+          {formError && <div className="field-error" role="alert">{formError}</div>}
+          <div className="modal-actions">
+            {student && <button type="button" className="text-button danger delete-action" onClick={() => void remove()}><Trash2 size={15} /> 刪除學生</button>}
+            <button type="button" className="button quiet" onClick={close}>取消</button>
+            <button type="submit" className="button primary">{saving ? '儲存中…' : student ? '儲存個資' : '儲存學生'}</button>
+          </div>
+        </fieldset>
+      </form>
+    </div>
+  </div>
 }
 
 function RegistrationReviewModal({ registration, teacherId, close, reload, notify }: { registration: Registration; teacherId: string; close: () => void; reload: () => Promise<void>; notify: (message: string) => void }) {

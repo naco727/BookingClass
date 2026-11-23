@@ -1,6 +1,6 @@
 import { supabase } from './supabase.ts'
 import { demoBookings, demoRegistrations, demoSettings, demoSlots, demoStudents, demoTeachers } from './mockData.ts'
-import type { AvailabilitySlot, Booking, BookingSelection, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, TeacherProfile, TeacherSession } from './types.ts'
+import type { AvailabilitySlot, Booking, BookingSelection, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, StudentProfileInput, TeacherProfile, TeacherSession } from './types.ts'
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
 const mockStorageKey = 'between-classes-mock-v3'
@@ -149,6 +149,37 @@ export async function listStudents(teacherId: string): Promise<Student[]> {
     return (data ?? []).map(normalizeStudent)
   }
   return clone(db.students.filter((item) => item.teacherId === teacherId))
+}
+
+export async function teacherAddStudent(profile: StudentProfileInput, teacherId: string): Promise<string> {
+  if (supabase) {
+    const { data, error } = await supabase.rpc('teacher_add_student', {
+      p_teacher_id: teacherId,
+      p_name: profile.name,
+      p_grade: profile.grade,
+      p_school: profile.school,
+      p_focus: profile.focus,
+      p_location: profile.location,
+      p_phone: profile.phone,
+      p_material: profile.material,
+      p_region: profile.region,
+    })
+    if (error?.code === '42501') throw new Error('僅限啟用的老師帳號新增學生，請確認登入狀態。')
+    if (error?.message === 'invalid_student_region') throw new Error('這個地點標籤已無法使用，請更新後重新選擇。')
+    if (error) throw new Error('新增學生失敗，請確認個資欄位或稍後再試。')
+    return data
+  }
+  const student: Student = {
+    ...profile,
+    id: crypto.randomUUID(),
+    teacherId,
+    tags: [],
+    active: true,
+    createdAt: new Date().toISOString(),
+  }
+  db.students.unshift(student)
+  persistMock()
+  return student.id
 }
 
 export async function updateStudent(id: string, patch: Partial<Student>, teacherId: string): Promise<Student> {

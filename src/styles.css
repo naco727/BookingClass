@@ -540,6 +540,9 @@ footer { margin-top:auto; padding:25px 5.5vw; display:flex; justify-content:spac
 }
 
 /* Formal student profile: view first, edit personal data from the detail modal. */
+.students-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:17px; }
+.students-toolbar .tab-switch { margin-bottom:0; }
+.add-student-button { min-height:40px; margin-left:auto; padding:8px 10px; font-size:12px; white-space:nowrap; }
 .student-card-clickable { cursor:pointer; transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
 .student-card-clickable:hover { transform:translateY(-1px); border-color:#b9d8ca; box-shadow:0 8px 20px rgba(31,62,59,.07); }
 .student-card-head > div { min-width:0; }

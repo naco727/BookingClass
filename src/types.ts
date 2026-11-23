@@ -37,6 +37,8 @@ export type Student = {
   createdAt: string
 }
 
+export type StudentProfileInput = Pick<Student, 'name' | 'grade' | 'school' | 'focus' | 'location' | 'phone' | 'material' | 'region'>
+
 export type Booking = {
   id: string
   teacherId: string
