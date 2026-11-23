@@ -121,12 +121,10 @@ function TimeWheels({ value, onChange, options }: { value: string; onChange: (va
   const choose = (part: 'hour' | 'minute', next: string) => {
     const candidate = part === 'hour' ? `${next}:${selectedMinute}` : `${selectedHour}:${next}`
     if (safeOptions.includes(candidate)) { onChange(candidate); return }
-    const compatible = part === 'hour'
-      ? safeOptions.find((item) => item.slice(0, 2) === next)
-      : safeOptions.find((item) => item.slice(0, 2) === selectedHour) ?? safeOptions.find((item) => item.slice(3) === next)
+    const compatible = part === 'hour' ? safeOptions.find((item) => item.slice(0, 2) === next) : undefined
     if (compatible) onChange(compatible)
   }
-  return <div className="picker-time-wheels"><div className="picker-wheel-column"><span className="picker-wheel-label">時</span><div className="picker-wheel" role="listbox" aria-label="選擇小時">{hours.map((hour) => <button type="button" role="option" aria-selected={hour === selectedHour} className={hour === selectedHour ? 'selected' : ''} key={hour} ref={(element) => { hourRefs.current[hour] = element }} onClick={() => choose('hour', hour)}>{hour}</button>)}</div></div><div className="picker-wheel-column"><span className="picker-wheel-label">分</span><div className="picker-wheel" role="listbox" aria-label="選擇分鐘">{minutes.map((minute) => <button type="button" role="option" aria-selected={minute === selectedMinute} className={minute === selectedMinute ? 'selected' : ''} key={minute} ref={(element) => { minuteRefs.current[minute] = element }} onClick={() => choose('minute', minute)}>{minute}</button>)}</div></div></div>
+  return <div className="picker-time-wheels"><div className="picker-wheel-column"><span className="picker-wheel-label">時</span><div className="picker-wheel" role="listbox" aria-label="選擇小時">{hours.map((hour) => <button type="button" role="option" aria-selected={hour === selectedHour} className={hour === selectedHour ? 'selected' : ''} key={hour} ref={(element) => { hourRefs.current[hour] = element }} onClick={() => choose('hour', hour)}>{hour}</button>)}</div></div><div className="picker-wheel-column"><span className="picker-wheel-label">分</span><div className="picker-wheel" role="listbox" aria-label="選擇分鐘">{minutes.map((minute) => <button type="button" role="option" aria-selected={minute === selectedMinute} disabled={!safeOptions.includes(`${selectedHour}:${minute}`)} className={minute === selectedMinute ? 'selected' : ''} key={minute} ref={(element) => { minuteRefs.current[minute] = element }} onClick={() => choose('minute', minute)}>{minute}</button>)}</div></div></div>
 }
 
 function PickerDialog({ label, onDismiss, children }: { label: string; onDismiss: () => void; children: ReactNode }) {
@@ -181,7 +179,12 @@ const dateFromInput = (value: string) => {
   return { date, time: timePart.slice(0, 5) || '09:00', month: new Date(year, (month || 1) - 1, 1) }
 }
 
-function DateTimePicker({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function DateTimePicker({ label, value, minimum, onChange }: {
+  label: string
+  value: string
+  minimum: 'today' | { after: string }
+  onChange: (value: string) => void
+}) {
   const initial = dateFromInput(value)
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<'date' | 'time'>('date')
@@ -193,17 +196,33 @@ function DateTimePicker({ label, value, onChange }: { label: string; value: stri
   const monthIndex = month.getMonth()
   const firstDay = month.getDay()
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate()
+  const [minDate, cutoff] = minimum === 'today' ? [localDate(new Date()), ''] : minimum.after.split('T')
+  const firstDayTimes = timeOptions.filter((option) => option > cutoff)
+  const timesFor = (day: string) => {
+    if (day < minDate) return []
+    return day === minDate ? firstDayTimes : timeOptions
+  }
+  const availableTimes = timesFor(date)
+  const canGoBack = localDate(month).slice(0, 7) > minDate.slice(0, 7)
 
   useEffect(() => {
     if (open) stepHeading.current?.focus({ preventScroll: true })
   }, [open, step])
 
   const start = () => {
+    const earliestDate = minimum === 'today' ? localDate(new Date()) : minDate
     setDate(initial.date)
     setTime(timeOptions.includes(initial.time) ? initial.time : `${initial.time.slice(0, 2)}:${padNumber(Math.floor(Number(initial.time.slice(3)) / 15) * 15)}`)
-    setMonth(initial.month)
+    setMonth(initial.date < earliestDate ? dateFromInput(earliestDate).month : initial.month)
     setStep('date')
     setOpen(true)
+  }
+  const chooseDate = (day: string) => {
+    const options = timesFor(day)
+    if (!options.length) return
+    setDate(day)
+    setTime((current) => options.includes(current) ? current : options[0])
+    setStep('time')
   }
   const dismiss = () => setOpen(false)
   const displayValue = `${initial.date.replaceAll('-', '/')} ${initial.time}`
@@ -217,13 +236,13 @@ function DateTimePicker({ label, value, onChange }: { label: string; value: stri
       <div className="picker-header">
         <div>
           <b tabIndex={-1} ref={stepHeading}>{step === 'date' ? '選擇日期' : '選擇時間'}</b>
-          <small>{step === 'date' ? label : '24 小時制・每 15 分鐘'}</small>
+          <small>{step === 'time' ? '24 小時制・每 15 分鐘' : minimum === 'today' ? '開始日期最早為今天' : '結束時間必須晚於開始時間'}</small>
         </div>
         <button type="button" className="picker-control" aria-label="取消選擇" onClick={dismiss}><X size={18} /></button>
       </div>
       {step === 'date' ? <>
         <div className="picker-calendar-head">
-          <button type="button" className="picker-control" aria-label="上個月" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}>‹</button>
+          <button type="button" className="picker-control" aria-label="上個月" disabled={!canGoBack} onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}>‹</button>
           <b>{year} 年 {monthIndex + 1} 月</b>
           <button type="button" className="picker-control" aria-label="下個月" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}>›</button>
         </div>
@@ -233,7 +252,8 @@ function DateTimePicker({ label, value, onChange }: { label: string; value: stri
           {Array.from({ length: daysInMonth }, (_, index) => {
             const day = index + 1
             const dayValue = localDate(new Date(year, monthIndex, day))
-            return <button type="button" key={day} aria-pressed={date === dayValue} className="calendar-picker-day" onClick={() => { setDate(dayValue); setStep('time') }}>{day}</button>
+            const disabled = timesFor(dayValue).length === 0
+            return <button type="button" key={day} aria-pressed={!disabled && date === dayValue} disabled={disabled} className="calendar-picker-day" onClick={() => chooseDate(dayValue)}>{day}</button>
           })}
         </div>
       </> : <>
@@ -242,8 +262,8 @@ function DateTimePicker({ label, value, onChange }: { label: string; value: stri
           <time dateTime={date}>{date.replaceAll('-', '/')}</time>
           <span>更改日期</span>
         </button>
-        <TimeWheels value={time} onChange={setTime} />
-        <button type="button" className="picker-done confirm" onClick={() => { onChange(`${date}T${time}`); dismiss() }}>完成</button>
+        <TimeWheels value={time} options={availableTimes} onChange={setTime} />
+        <button type="button" className="picker-done confirm" disabled={!availableTimes.includes(time)} onClick={() => { onChange(`${date}T${time}`); dismiss() }}>完成</button>
       </>}
     </PickerDialog>}
   </div>
@@ -588,14 +608,22 @@ function SettingsTab({ settings, session, onProfileChange, reload, notify }: { s
   const [renamedLabels, setRenamedLabels] = useState<Array<[string, string]>>([])
   const [displayName, setDisplayName] = useState(session.displayName)
   const [copiedLink, setCopiedLink] = useState<'book' | 'register' | 'availability' | null>(null)
-  const bookingStart = new Date(open)
-  const bookingEnd = new Date(close)
-  const validBookingWindow = bookingStart < bookingEnd
+  const startUnchanged = open === toLocalDateTime(settings.bookingOpen)
+  const endUnchanged = close === toLocalDateTime(settings.bookingClose)
+  const bookingStart = new Date(startUnchanged ? settings.bookingOpen : open)
+  const bookingEnd = new Date(endUnchanged ? settings.bookingClose : close)
+  const getWindowError = () => {
+    if (!startUnchanged && open.slice(0, 10) < localDate(new Date())) return '選課開始日期不得早於今天'
+    if (!(bookingStart < bookingEnd)) return '選課結束時間必須晚於開始時間'
+    return null
+  }
+  const windowError = getWindowError()
   const addTag = () => { const value = newTag.trim(); if (value && !tagOptions.includes(value)) { setTagOptions((current) => [...current, value]); setNewTag('') } }
   const removeTag = (tag: string) => setTagOptions((current) => current.filter((item) => item !== tag))
   const saveTagEdit = () => { const value = editingValue.trim(); if (!editingTag || !value || (tagOptions.includes(value) && value !== editingTag)) return; setTagOptions((current) => current.map((item) => item === editingTag ? value : item)); setRenamedLabels((current) => [...current, [editingTag, value]]); setEditingTag(null); setEditingValue('') }
   const save = async () => {
-    if (!validBookingWindow) return
+    const error = getWindowError()
+    if (error) { notify(error); return }
     try {
       for (const [oldLabel, newLabel] of renamedLabels) await renameLocationLabel(oldLabel, newLabel, session.id)
       await saveSettings({ teacherId: session.id, bookingOpen: bookingStart.toISOString(), bookingClose: bookingEnd.toISOString(), tagOptions }, session.id)
@@ -611,11 +639,11 @@ function SettingsTab({ settings, session, onProfileChange, reload, notify }: { s
   const copyLink = async (mode: 'book' | 'register' | 'availability') => { await navigator.clipboard?.writeText(linkFor(mode)); setCopiedLink(mode); notify(mode === 'book' ? '家長選課連結已複製' : mode === 'register' ? '新生登記連結已複製' : '老師空堂連結已複製') }
   return <div className="tab-content"><div className="panel settings-panel"><div className="eyebrow">TEACHER PROFILE · {session.displayName}</div><h2>教師設定</h2><p>設定家長看到的老師名稱、學期選課期間、專屬連結與可使用的上課地區。</p><div className="profile-name-row"><Field label="教師名稱"><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：林老師" /></Field><button className="button quiet" onClick={saveProfile}>儲存名稱</button></div><div className="eyebrow settings-section-label">TERM BOOKING WINDOW</div><h2>設定本學期選課開放期間</h2><p>學期初設定一次；家長選到的時段會成為日後固定的星期與時間。</p>
     <div className="form-grid two">
-      <DateTimePicker label="開始時間" value={open} onChange={setOpen} />
-      <DateTimePicker label="結束時間" value={close} onChange={setClose} />
+      <DateTimePicker label="開始時間" value={open} minimum="today" onChange={setOpen} />
+      <DateTimePicker label="結束時間" value={close} minimum={{ after: open }} onChange={setClose} />
     </div>
-    {!validBookingWindow && <div className="booking-window-error" role="alert">選課結束時間必須晚於開始時間</div>}
-    <div className="link-panel"><div className="settings-subheading"><div><b>老師專屬家長連結</b><small>只會顯示這位老師的頁面，不會顯示管理入口。</small></div></div><div className="link-row"><div><b>家長選課</b><code>{linkFor('book')}</code></div><button className="copy-link-button" onClick={() => copyLink('book')}>{copiedLink === 'book' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'book' ? '已複製' : '複製連結'}</button></div><div className="link-row"><div><b>老師空堂</b><code>{linkFor('availability')}</code></div><button className="copy-link-button" onClick={() => copyLink('availability')}>{copiedLink === 'availability' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'availability' ? '已複製' : '複製連結'}</button></div><div className="link-row"><div><b>新生登記</b><code>{linkFor('register')}</code></div><button className="copy-link-button" onClick={() => copyLink('register')}>{copiedLink === 'register' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'register' ? '已複製' : '複製連結'}</button></div></div><div className="tag-settings"><div className="settings-subheading"><div><b>上課地區選項</b><small>學生檔案只使用地區標籤，可新增、編輯或刪除。</small></div></div><div className="tag-list">{tagOptions.map((tag) => editingTag === tag ? <span className="managed-tag editing" key={tag}><input value={editingValue} onChange={(event) => setEditingValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveTagEdit() }} /><button type="button" onClick={saveTagEdit} aria-label="儲存地區"><Check size={13} /></button><button type="button" onClick={() => setEditingTag(null)} aria-label="取消編輯"><X size={13} /></button></span> : <span className="managed-tag" key={tag}>{tag}<button type="button" onClick={() => { setEditingTag(tag); setEditingValue(tag) }} aria-label={`編輯${tag}`}><Pencil size={13} /></button><button type="button" onClick={() => removeTag(tag)} aria-label={`刪除${tag}`}><X size={13} /></button></span>)}</div><div className="add-tag-row"><input value={newTag} onChange={(event) => setNewTag(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTag() } }} placeholder="例如：內湖、松山、線上" /><button className="button quiet" type="button" onClick={addTag}><Plus size={15} /> 新增地區</button></div></div><button className="button primary" onClick={save} disabled={!validBookingWindow}>儲存設定 <Check size={17} /></button></div><div className="panel security-panel"><ShieldCheck size={21} /><div><h3>權限與個資</h3><p>老師後台使用 Supabase Auth 登入；家長端只透過公開 RPC 取得已驗證學生的可選時段。</p></div></div></div>
+    {windowError && <div className="booking-window-error" role="alert">{windowError}</div>}
+    <div className="link-panel"><div className="settings-subheading"><div><b>老師專屬家長連結</b><small>只會顯示這位老師的頁面，不會顯示管理入口。</small></div></div><div className="link-row"><div><b>家長選課</b><code>{linkFor('book')}</code></div><button className="copy-link-button" onClick={() => copyLink('book')}>{copiedLink === 'book' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'book' ? '已複製' : '複製連結'}</button></div><div className="link-row"><div><b>老師空堂</b><code>{linkFor('availability')}</code></div><button className="copy-link-button" onClick={() => copyLink('availability')}>{copiedLink === 'availability' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'availability' ? '已複製' : '複製連結'}</button></div><div className="link-row"><div><b>新生登記</b><code>{linkFor('register')}</code></div><button className="copy-link-button" onClick={() => copyLink('register')}>{copiedLink === 'register' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'register' ? '已複製' : '複製連結'}</button></div></div><div className="tag-settings"><div className="settings-subheading"><div><b>上課地區選項</b><small>學生檔案只使用地區標籤，可新增、編輯或刪除。</small></div></div><div className="tag-list">{tagOptions.map((tag) => editingTag === tag ? <span className="managed-tag editing" key={tag}><input value={editingValue} onChange={(event) => setEditingValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveTagEdit() }} /><button type="button" onClick={saveTagEdit} aria-label="儲存地區"><Check size={13} /></button><button type="button" onClick={() => setEditingTag(null)} aria-label="取消編輯"><X size={13} /></button></span> : <span className="managed-tag" key={tag}>{tag}<button type="button" onClick={() => { setEditingTag(tag); setEditingValue(tag) }} aria-label={`編輯${tag}`}><Pencil size={13} /></button><button type="button" onClick={() => removeTag(tag)} aria-label={`刪除${tag}`}><X size={13} /></button></span>)}</div><div className="add-tag-row"><input value={newTag} onChange={(event) => setNewTag(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTag() } }} placeholder="例如：內湖、松山、線上" /><button className="button quiet" type="button" onClick={addTag}><Plus size={15} /> 新增地區</button></div></div><button className="button primary" onClick={save} disabled={Boolean(windowError)}>儲存設定 <Check size={17} /></button></div><div className="panel security-panel"><ShieldCheck size={21} /><div><h3>權限與個資</h3><p>老師後台使用 Supabase Auth 登入；家長端只透過公開 RPC 取得已驗證學生的可選時段。</p></div></div></div>
 }
 
 function SettingsTabLegacy({ settings, session, onProfileChange, reload, notify }: { settings: Settings; session: TeacherSession; onProfileChange: (session: TeacherSession) => void; reload: () => Promise<void>; notify: (message: string) => void }) {
