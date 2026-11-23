@@ -594,8 +594,22 @@ body:has(.picker-dialog[open]) { overflow:hidden; }
 .picker-wheel button { width:100%; min-height:40px; border:1px solid transparent; border-radius:10px; background:transparent; color:var(--ink); font-weight:800; scroll-snap-align:center; }
 .picker-wheel button:hover, .picker-wheel button.selected { background:linear-gradient(135deg,#4d7860,#6f9b7b); color:#fff; box-shadow:0 7px 16px rgba(77,120,96,.22); }
 .picker-done { width:100%; min-height:44px; margin-top:12px; border:0; border-radius:10px; background:#edf3ed; color:#4d7860; padding:9px; font-size:14px; font-weight:800; }
-.picker-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
-.picker-done.confirm { color:#fff; background:#4d7860; }
+.picker-selected-date, .picker-done.confirm { color:#fff; background:#385e48; }
+.picker-selected-date {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  min-height:44px;
+  margin-bottom:12px;
+  padding:9px 11px;
+  border:0;
+  border-radius:10px;
+  text-align:left;
+}
+.picker-selected-date svg { flex:none; }
+.picker-selected-date time { flex:1; font-size:14px; font-weight:800; }
+.picker-selected-date span { font-size:12px; text-decoration:underline; }
 .picker-empty { padding:28px 10px; text-align:center; color:#8b9992; font-size:12px; }
 .auth-help { color:#8b9992; font-size:12px; line-height:1.7; margin:8px 0 18px; }
 .picker-option { min-width:0; min-height:40px; border:1px solid #edf0ea; border-radius:9px; background:#fafbf8; color:var(--ink); font:600 12px 'DM Mono'; }
@@ -604,7 +618,18 @@ body:has(.picker-dialog[open]) { overflow:hidden; }
 .picker-calendar-week, .picker-calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; }
 .picker-calendar-week span { padding:3px 0; text-align:center; color:#8b9992; font-size:10px; font-weight:700; }
 .calendar-picker-day { min-height:34px; border:0; border-radius:8px; background:transparent; color:var(--ink); font-size:12px; }
-.calendar-picker-day:hover, .calendar-picker-day[aria-pressed="true"] { background:#4d7860; color:#fff; }
+.calendar-picker-day[aria-pressed="true"] { background:#385e48; color:#fff; font-weight:800; }
+@media (hover:hover) {
+  .calendar-picker-day:not([aria-pressed="true"]):hover { background:#edf3ed; }
+}
+.booking-window-error {
+  margin:0 0 16px;
+  padding:10px 12px;
+  color:#893c33;
+  background:#fff2ef;
+  border-radius:8px;
+  font-size:13px;
+}
 .picker-time-title { display:flex; align-items:center; gap:5px; margin:13px 0 7px; padding-top:11px; border-top:1px solid #edf0ea; color:#5b706a; font-size:11px; font-weight:700; }
 .picker-time-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; max-height:145px; overflow-y:auto; }
 @media (max-width:650px) {
