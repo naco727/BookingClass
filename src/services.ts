@@ -1,4 +1,5 @@
 import { supabase } from './supabase.ts'
+import type { User } from '@supabase/supabase-js'
 import { demoBookings, demoRegistrations, demoSettings, demoSlots, demoStudents, demoTeachers } from './mockData.ts'
 import type { AvailabilitySlot, Booking, BookingSelection, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, StudentLookupResult, StudentProfileInput, TeacherProfile, TeacherSession } from './types.ts'
 
@@ -487,36 +488,46 @@ export async function updateTeacherProfile(teacherId: string, displayName: strin
   return clone(teacher)
 }
 
-export async function teacherSignIn(email: string, password: string): Promise<TeacherSession> {
+export type TeacherConsoleSession = { teacher: TeacherSession | null; isAdmin: boolean }
+
+async function loadTeacherConsoleSession(user: User): Promise<TeacherConsoleSession | null> {
+  if (!supabase) return null
+  const [admin, profile] = await Promise.all([
+    supabase.rpc('is_teacher_admin'),
+    user.app_metadata?.role === 'teacher'
+      ? supabase.from('teachers').select('id, slug, display_name').eq('id', user.id).maybeSingle()
+      : null,
+  ])
+  if (profile?.error) throw profile.error
+  const isAdmin = admin.data === true
+  const teacher = profile?.data ? { id: profile.data.id, slug: profile.data.slug, displayName: profile.data.display_name } : null
+  if (!teacher && admin.error) throw admin.error
+  return teacher || isAdmin ? { teacher, isAdmin } : null
+}
+
+export async function teacherSignIn(email: string, password: string): Promise<TeacherConsoleSession> {
   if (supabase) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
-    const { data } = await supabase.auth.getUser()
-    if (data.user?.app_metadata?.role !== 'teacher') {
-      await supabase.auth.signOut()
-      throw new Error('此帳號沒有老師權限')
-    }
-    const { data: profile, error: profileError } = await supabase.from('teachers').select('id, slug, display_name').eq('id', data.user?.id).single()
-    if (profileError) throw profileError
-    return { id: profile.id, slug: profile.slug, displayName: profile.display_name }
+    const consoleSession = data.user && await loadTeacherConsoleSession(data.user)
+    if (consoleSession) return consoleSession
+    await supabase.auth.signOut({ scope: 'local' })
+    throw new Error('此帳號沒有老師或管理員權限')
   }
   if (password !== 'teacher123' || !['teacher@demo.tw', 'teacherb@demo.tw'].includes(email)) throw new Error('Demo 帳號或密碼不正確')
   const session = clone(db.teachers.find((teacher) => teacher.id === (email === 'teacherb@demo.tw' ? 'teacher-b' : 'teacher-a')) ?? demoTeachers[0])
   if (typeof localStorage !== 'undefined') localStorage.setItem(mockSessionKey, JSON.stringify(session))
-  return session
+  return { teacher: session, isAdmin: false }
 }
 
-export async function getCurrentTeacherSession(): Promise<TeacherSession | null> {
+export async function getCurrentTeacherSession(): Promise<TeacherConsoleSession | null> {
   if (supabase) {
-    const { data: sessionData } = await supabase.auth.getSession()
-    const user = sessionData.session?.user
-    if (!user || user.app_metadata?.role !== 'teacher') return null
-    const { data, error } = await supabase.from('teachers').select('id, slug, display_name').eq('id', user.id).single()
+    const { data, error } = await supabase.auth.getSession()
     if (error) throw error
-    return { id: data.id, slug: data.slug, displayName: data.display_name }
+    return data.session ? loadTeacherConsoleSession(data.session.user) : null
   }
   if (typeof localStorage === 'undefined') return null
-  try { const session = JSON.parse(localStorage.getItem(mockSessionKey) ?? 'null') as TeacherSession | null; return session?.id && db.teachers.some((teacher) => teacher.id === session.id) ? session : null } catch { return null }
+  try { const session = JSON.parse(localStorage.getItem(mockSessionKey) ?? 'null') as TeacherSession | null; return session?.id && db.teachers.some((teacher) => teacher.id === session.id) ? { teacher: session, isAdmin: false } : null } catch { return null }
 }
 
 export async function teacherSignOut(): Promise<void> { if (supabase) await supabase.auth.signOut(); if (typeof localStorage !== 'undefined') localStorage.removeItem(mockSessionKey) }

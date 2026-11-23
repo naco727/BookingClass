@@ -79,4 +79,4 @@ Vite 已設定 `base: '/BookingClass/'`。`.github/workflows/deploy-pages.yml` �
 
 3. 在 Supabase 的 Authentication → URL Configuration 確認 Site URL 與 Redirect URLs 都允許 `https://naco727.github.io/BookingClass/`。如果網站改用自訂網域，請另外更新 Edge Function 的 `TEACHER_INVITE_REDIRECT_URL` 環境變數。
 4. 若要邀請 Supabase 專案團隊以外的老師，在 Authentication → Email → SMTP Settings 設定自己的寄信服務。邀請信沿用 Auth 的 Invite user 範本。
-5. 管理員登入後，從「設定」進入「老師權限管理」，輸入老師 Email，按「寄出邀請並授權」。老師開啟邀請信即可設定密碼並登入。管理員也可直接開啟 `https://naco727.github.io/BookingClass/?mode=admin`。
+5. 管理員用課間後台的登入頁登入，從「設定」切換到「權限管理」，輸入老師 Email，按「寄出邀請並授權」。老師開啟邀請信即可設定密碼並登入。原先的 `https://naco727.github.io/BookingClass/?mode=admin` 會開啟同一個後台分頁。

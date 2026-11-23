@@ -713,11 +713,14 @@ body:has(.picker-dialog[open]) { overflow:hidden; }
 .settings-layout { max-width:720px; }
 .settings-tabs {
   display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-auto-flow:column;
+  grid-auto-columns:minmax(0,1fr);
   gap:5px;
   width:min(100%,370px);
   padding:4px 3px 0;
 }
+.settings-tabs:has(button:nth-child(4)) { width:min(100%,490px); }
+.settings-tabs:has(button:only-child) { width:max-content; }
 .settings-tabs button {
   position:relative;
   min-width:0;
@@ -865,11 +868,7 @@ body:has(.picker-dialog[open]) { overflow:hidden; }
   .topbar { height:calc(65px + env(safe-area-inset-top)); padding-top:env(safe-area-inset-top); }
 }
 
-.teacher-admin-link { margin-bottom:16px; }
-.teacher-admin-link a, .teacher-admin-page a { text-decoration:none; }
-.teacher-admin-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:12px; background:#e7f1ea; color:#356c61; }
-.teacher-admin-nav { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:18px; }
-.teacher-admin-nav .text-button { min-height:40px; color:#356c61; font-size:13px; }
+.teacher-invitation-form { max-width:580px; }
 .teacher-admin-feedback { display:flex; align-items:flex-start; gap:9px; margin-top:14px; padding:12px; border-radius:10px; background:#e7f1ea; color:#2e614e; font-size:14px; line-height:1.5; overflow-wrap:anywhere; }
 .teacher-admin-feedback strong { display:block; }
 .teacher-admin-feedback svg { flex:none; margin-top:2px; }

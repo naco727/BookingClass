@@ -5,8 +5,9 @@ import { createRoot } from 'react-dom/client'
 import { CalendarDays, Check, ChevronRight, Clock3, Copy, DoorOpen, GraduationCap, LogIn, MapPin, Menu, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import './styles.css'
 import { initialAuthUrl, supabase } from './supabase'
-import TeacherAdminPage, { isTeacherAdmin, teacherAdminUrl } from './TeacherAdminPage'
+import { TeacherInvitationForm } from './TeacherInvitationForm'
 import { addSlot, approveRegistration, bookSelections, cancelBooking, deleteRegistration, deleteSlot, deleteStudent, getCurrentTeacherSession, getParentAvailability, getPublicBookingStatus, getPublicTeacher, getSettings, getTeacherAvailability, listRegistrations, listSlots, listStudents, lookupStudents, renameLocationLabel, saveSettings, submitRegistration, teacherAddStudent, teacherBookExistingStudent, teacherCreateBooking, teacherSignIn, teacherSignOut, updateBooking, updateSlot, updateStudent, updateTeacherPassword, updateTeacherProfile } from './services'
+import type { TeacherConsoleSession } from './services'
 import type { AvailabilitySlot, Booking, BookingSelection, ContactDetails, ContactMethod, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, TeacherProfile, TeacherSession, Weekday } from './types'
 
 type View = 'home' | 'register' | 'book' | 'teacher'
@@ -63,9 +64,8 @@ function App() {
   if (checkingAuthCallback) return <div className="app-shell"><div className="scoped-loading">正在確認邀請連結…</div></div>
   if (authCallback === 'invalid') return <div className="app-shell"><main className="login-page compact-login"><section className="login-panel"><h2>邀請連結已失效</h2><p>請使用最新的邀請信，或聯絡管理員重新寄送。</p><a className="button secondary full" href={import.meta.env.BASE_URL}>返回老師登入</a></section></main></div>
   if (authCallback) return <div className="app-shell"><TeacherPasswordSetup mode={authCallback} onComplete={() => { window.history.replaceState({}, document.title, window.location.pathname); setAuthCallback(null) }} notify={notify} />{toast && <div className="toast"><Check size={17} />{toast}</div>}</div>
-  if (params.get('mode') === 'admin') return <div className="app-shell"><TeacherAdminPage /></div>
   if (scoped && !linkTeacher) return <div className="app-shell"><div className="scoped-loading">正在載入老師專屬頁面…</div></div>
-  if (!scoped) return <div className="app-shell"><TeacherPage notify={notify} />{toast && <div className="toast"><Check size={17} />{toast}</div>}</div>
+  if (!scoped) return <div className="app-shell"><TeacherPage openAdmin={params.get('mode') === 'admin'} notify={notify} />{toast && <div className="toast"><Check size={17} />{toast}</div>}</div>
   return <div className="app-shell">
     <Header view={view} onNavigate={(next) => { setView(next); setMobileOpen(false) }} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} scoped={scoped} teacher={linkTeacher} />
     <main>
@@ -564,34 +564,67 @@ const withinTime = (time: string, start: string, end: string) => toMinutes(time)
 const isValidBookingRange = (start: string, end: string, segment: { start: string; end: string }) => toMinutes(start) >= toMinutes(segment.start) && toMinutes(end) <= toMinutes(segment.end) && toMinutes(start) < toMinutes(end)
 const freeSegmentsForSlot = (slot: AvailabilitySlot) => { const occupied = slot.bookings.filter((booking) => booking.status === 'confirmed').sort((a, b) => toMinutes(a.start) - toMinutes(b.start)); const segments: Array<{ start: string; end: string }> = []; let cursor = toMinutes(slot.start); for (const booking of occupied) { if (toMinutes(booking.start) > cursor) segments.push({ start: fromMinutes(cursor), end: booking.start }); cursor = Math.max(cursor, toMinutes(booking.end)) } if (cursor < toMinutes(slot.end)) segments.push({ start: fromMinutes(cursor), end: slot.end }); return segments.filter((segment) => toMinutes(segment.end) - toMinutes(segment.start) > 30) }
 
-function TeacherPage({ notify }: { notify: (message: string) => void }) {
-  const [loggedIn, setLoggedIn] = useState(false)
-  const [session, setSession] = useState<TeacherSession | null>(null)
+function TeacherPage({ openAdmin, notify }: { openAdmin: boolean; notify: (message: string) => void }) {
+  const [session, setSession] = useState<TeacherConsoleSession | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
-  useEffect(() => { let active = true; void getCurrentTeacherSession().then((current) => { if (!active) return; if (current) { setSession(current); setLoggedIn(true) } }).catch((error) => notify(error instanceof Error ? error.message : '登入狀態確認失敗')).finally(() => { if (active) setCheckingSession(false) }); return () => { active = false } }, [])
-  const signIn = async (event: FormEvent) => { event.preventDefault(); setLoading(true); try { const nextSession = await teacherSignIn(email, password); setSession(nextSession); setLoggedIn(true); notify(`${nextSession.displayName} 登入成功`) } catch (error) { notify(error instanceof Error ? error.message : '登入失敗') } finally { setLoading(false) } }
+  useEffect(() => { let active = true; void getCurrentTeacherSession().then((current) => { if (active) setSession(current) }).catch((error) => notify(error instanceof Error ? error.message : '登入狀態確認失敗')).finally(() => { if (active) setCheckingSession(false) }); return () => { active = false } }, [])
+  const signIn = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    try {
+      const nextSession = await teacherSignIn(email, password)
+      setSession(nextSession)
+      setPassword('')
+      notify(`${nextSession.teacher?.displayName ?? '管理員'} 登入成功`)
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '登入失敗')
+    } finally {
+      setLoading(false)
+    }
+  }
   if (checkingSession) return <div className="compact-login"><div className="login-panel"><div className="eyebrow">TEACHER ACCESS</div><h2>確認登入狀態…</h2></div></div>
-  if (!loggedIn) return <div className="login-page compact-login"><div className="login-panel"><div className="login-brand-mark"><img className="brand-image" src={`${import.meta.env.BASE_URL}app-icon.jpg`} alt="課間" /></div><div className="eyebrow">TEACHER ACCESS</div><h2>登入老師後台</h2><form onSubmit={signIn}><Field label="Email"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></Field><Field label="密碼"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field><button className="button primary full" disabled={loading}>{loading ? '登入中…' : '登入後台'} <LogIn size={17} /></button></form></div></div>
-  return <TeacherDashboard session={session!} onProfileChange={setSession} notify={notify} onLogout={async () => { await teacherSignOut(); setSession(null); setLoggedIn(false) }} />
+  if (!session) return <div className="login-page compact-login"><div className="login-panel"><div className="login-brand-mark"><img className="brand-image" src={`${import.meta.env.BASE_URL}app-icon.jpg`} alt="課間" /></div><div className="eyebrow">TEACHER ACCESS</div><h2>登入老師後台</h2><form onSubmit={signIn}><Field label="Email"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></Field><Field label="密碼"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field><button className="button primary full" disabled={loading}>{loading ? '登入中…' : '登入後台'} <LogIn size={17} /></button></form></div></div>
+  return <TeacherDashboard session={session} openAdmin={openAdmin} onProfileChange={(teacher) => setSession({ ...session, teacher })} notify={notify} onLogout={async () => { await teacherSignOut(); setSession(null) }} />
 }
 
-function TeacherDashboard({ session, onProfileChange, notify, onLogout }: { session: TeacherSession; onProfileChange: (session: TeacherSession) => void; notify: (message: string) => void; onLogout: () => void }) {
-  const [tab, setTab] = useState<'overview' | 'students' | 'schedule' | 'settings'>('overview')
+function TeacherDashboard({ session: { teacher, isAdmin }, openAdmin, onProfileChange, notify, onLogout }: { session: TeacherConsoleSession; openAdmin: boolean; onProfileChange: (session: TeacherSession) => void; notify: (message: string) => void; onLogout: () => void }) {
+  const [tab, setTab] = useState<'overview' | 'students' | 'schedule' | 'settings'>(!teacher || openAdmin ? 'settings' : 'overview')
   const [registrations, setRegistrations] = useState<Registration[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [slots, setSlots] = useState<AvailabilitySlot[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
-  const [loading, setLoading] = useState(true)
-  const reload = async () => { setLoading(true); try { const [r, s, sl, st] = await Promise.all([listRegistrations(session.id), listStudents(session.id), listSlots(session.id), getSettings(session.id)]); setRegistrations(r); setStudents(s); setSlots(sl); setSettings(st) } catch (error) { notify(error instanceof Error ? error.message : '資料載入失敗') } finally { setLoading(false) } }
+  const [loading, setLoading] = useState(Boolean(teacher))
+  const reload = async () => { if (!teacher) return; setLoading(true); try { const [r, s, sl, st] = await Promise.all([listRegistrations(teacher.id), listStudents(teacher.id), listSlots(teacher.id), getSettings(teacher.id)]); setRegistrations(r); setStudents(s); setSlots(sl); setSettings(st) } catch (error) { notify(error instanceof Error ? error.message : '資料載入失敗') } finally { setLoading(false) } }
   useEffect(() => { void reload() }, [])
   const pending = registrations.filter((item) => item.status === 'pending')
   const bookings = slots.flatMap((slot) => slot.bookings)
-  const sideItems: Array<{ id: typeof tab; label: string; Icon: typeof DoorOpen }> = [{ id: 'overview', label: '總覽', Icon: DoorOpen }, { id: 'students', label: '學生檔案', Icon: Users }, { id: 'schedule', label: '固定課表', Icon: CalendarDays }, { id: 'settings', label: '搶課設定', Icon: Clock3 }]
+  const sideItems: Array<{ id: typeof tab; label: string; Icon: typeof DoorOpen }> = [{ id: 'overview', label: '總覽', Icon: DoorOpen }, { id: 'students', label: '學生檔案', Icon: Users }, { id: 'schedule', label: '固定課表', Icon: CalendarDays }, { id: 'settings', label: '設定', Icon: Clock3 }]
   const bookingWindowOpen = Boolean(settings && Date.now() >= Date.parse(settings.bookingOpen) && Date.now() <= Date.parse(settings.bookingClose))
-  return <div className="teacher-shell"><aside className="teacher-sidebar"><div className="teacher-logo"><span className="brand-mark"><img className="brand-image" src={`${import.meta.env.BASE_URL}app-icon.jpg`} alt="" /></span><b>課間</b></div><div className="teacher-profile"><span className="avatar large">{session.displayName.slice(0, 1)}</span><div><b>{session.displayName}</b><small>專屬教學後台</small></div></div><div className="side-nav">{sideItems.map(({ id, label, Icon }) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={17} />{label}{id === 'students' && pending.length > 0 && <b className="nav-count">{pending.length}</b>}</button>)}</div><button className="logout" onClick={onLogout}>登出 <LogIn size={15} /></button></aside><section className="teacher-content"><div className="teacher-top"><div><span className="eyebrow">TEACHER CONSOLE · {session.displayName}</span><h1>{tab === 'overview' ? `早安，${session.displayName}。` : tab === 'students' ? '學生檔案' : tab === 'schedule' ? '每週固定課表' : '搶課設定'}</h1></div><div className="top-actions"><span className="status-pill"><span className="live-dot" /> 系統運作中</span><button className="icon-button" onClick={reload} aria-label="重新整理"><RefreshCw size={17} className={loading ? 'spin' : ''} /></button></div></div>{tab === 'overview' && <Overview registrations={registrations} students={students} slots={slots} bookings={bookings} onReview={() => setTab('students')} />}{tab === 'students' && <StudentsTab registrations={registrations} students={students} tagOptions={settings?.tagOptions ?? []} teacherId={session.id} reload={reload} notify={notify} />}{tab === 'schedule' && <ScheduleTabV2 slots={slots} students={students} regionOptions={settings?.tagOptions ?? []} teacherId={session.id} bookingWindowOpen={bookingWindowOpen} reload={reload} notify={notify} />}{tab === 'settings' && settings && <SettingsTab settings={settings} session={session} onProfileChange={onProfileChange} onSettingsChange={setSettings} reload={reload} notify={notify} />}</section><TeacherBottomNav tab={tab} setTab={setTab} pendingCount={pending.length} /></div>
+  const displayName = teacher?.displayName ?? '管理員'
+  return <div className="teacher-shell">
+    <aside className="teacher-sidebar">
+      <div className="teacher-logo"><span className="brand-mark"><img className="brand-image" src={`${import.meta.env.BASE_URL}app-icon.jpg`} alt="" /></span><b>課間</b></div>
+      <div className="teacher-profile"><span className="avatar large">{displayName.slice(0, 1)}</span><div><b>{displayName}</b><small>{teacher ? '專屬教學後台' : '課間管理後台'}</small></div></div>
+      <div className="side-nav">{sideItems.filter(({ id }) => teacher || id === 'settings').map(({ id, label, Icon }) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={17} />{label}{id === 'students' && pending.length > 0 && <b className="nav-count">{pending.length}</b>}</button>)}</div>
+      <button className="logout" onClick={onLogout}>登出 <LogIn size={15} /></button>
+    </aside>
+    <section className="teacher-content">
+      <div className="teacher-top">
+        <div><span className="eyebrow">TEACHER CONSOLE · {displayName}</span><h1>{tab === 'overview' ? `早安，${displayName}。` : tab === 'students' ? '學生檔案' : tab === 'schedule' ? '每週固定課表' : '設定'}</h1></div>
+        {teacher && <div className="top-actions"><span className="status-pill"><span className="live-dot" /> 系統運作中</span><button className="icon-button" onClick={reload} aria-label="重新整理"><RefreshCw size={17} className={loading ? 'spin' : ''} /></button></div>}
+      </div>
+      {tab === 'overview' && <Overview registrations={registrations} students={students} slots={slots} bookings={bookings} onReview={() => setTab('students')} />}
+      {tab === 'students' && teacher && <StudentsTab registrations={registrations} students={students} tagOptions={settings?.tagOptions ?? []} teacherId={teacher.id} reload={reload} notify={notify} />}
+      {tab === 'schedule' && teacher && <ScheduleTabV2 slots={slots} students={students} regionOptions={settings?.tagOptions ?? []} teacherId={teacher.id} bookingWindowOpen={bookingWindowOpen} reload={reload} notify={notify} />}
+      {tab === 'settings' && (teacher && settings
+        ? <SettingsTab settings={settings} session={teacher} isAdmin={isAdmin} openAdmin={openAdmin} onProfileChange={onProfileChange} onSettingsChange={setSettings} reload={reload} notify={notify} />
+        : isAdmin && !loading && <div className="tab-content settings-layout"><SettingsNavigation sections={[adminSettingsSection]} value="admin" /><AdminSettingsPanel /></div>)}
+    </section>
+    {teacher && <TeacherBottomNav tab={tab} setTab={setTab} pendingCount={pending.length} />}
+  </div>
 }
 
 function Overview({ registrations, students, slots, bookings, onReview }: { registrations: Registration[]; students: Student[]; slots: AvailabilitySlot[]; bookings: Booking[]; onReview: () => void }) { const openSlots = slots.filter((slot) => slot.open).length; return <div className="overview"><div className="metric-grid"><Metric label="待審核新生" value={registrations.filter((item) => item.status === 'pending').length} suffix="筆" accent="orange" /><Metric label="正式學生" value={students.filter((item) => item.active).length} suffix="位" accent="teal" /><Metric label="已預約課堂" value={bookings.length} suffix="堂" accent="blue" /><Metric label="目前開放空檔" value={openSlots} suffix="段" accent="purple" /></div><div className="dashboard-grid"><div className="panel attention-panel"><div className="panel-heading"><div><span className="eyebrow">NEEDS ATTENTION</span><h2>新生登記</h2></div><button className="text-button" onClick={onReview}>查看全部 <ChevronRight size={15} /></button></div>{registrations.filter((item) => item.status === 'pending').slice(0, 3).map((item) => <div className="attention-row" key={item.id}><span className="avatar">{item.name.slice(0,1)}</span><div><b>{item.name}</b><small>{item.grade} · {item.school}</small></div><span className="pending-tag">待審核</span></div>)}{!registrations.some((item) => item.status === 'pending') && <div className="empty-inline">目前沒有待審核資料</div>}</div></div></div> }
@@ -1000,29 +1033,66 @@ function WeeklyTimetableV2({ slots, students, onLongPress, onSlotClick, onBookin
   </div>
 }
 
-const settingsSections = [
+const teacherSettingsSections = [
   { id: 'name', label: '老師名稱' },
   { id: 'regions', label: '地點標籤' },
   { id: 'booking', label: '選課' },
 ] as const
-type SettingsSection = typeof settingsSections[number]['id']
+const adminSettingsSection = { id: 'admin', label: '權限管理' } as const
+type SettingsOption = typeof teacherSettingsSections[number] | typeof adminSettingsSection
+type SettingsSection = SettingsOption['id']
 
-function SettingsTab({ settings, session, onProfileChange, onSettingsChange, reload, notify }: {
+function SettingsNavigation({ sections, value, onChange }: { sections: readonly SettingsOption[]; value: SettingsSection; onChange?: (value: SettingsSection) => void }) {
+  const navigateTabs = (event: React.KeyboardEvent, index: number) => {
+    if (!onChange) return
+    const count = sections.length
+    let next: number
+    if (event.key === 'ArrowRight') next = (index + 1) % count
+    else if (event.key === 'ArrowLeft') next = (index - 1 + count) % count
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = count - 1
+    else return
+
+    event.preventDefault()
+    const tab = sections[next].id
+    onChange(tab)
+    document.getElementById(`settings-tab-${tab}`)?.focus()
+  }
+
+  return <div className="settings-tabs" role="tablist" aria-label="設定">
+    {sections.map(({ id, label }, index) => <button
+      key={id}
+      id={`settings-tab-${id}`}
+      type="button"
+      role="tab"
+      aria-selected={value === id}
+      aria-controls={`settings-panel-${id}`}
+      tabIndex={value === id ? 0 : -1}
+      onClick={() => onChange?.(id)}
+      onKeyDown={(event) => navigateTabs(event, index)}
+    >{label}</button>)}
+  </div>
+}
+
+function AdminSettingsPanel({ hidden = false }: { hidden?: boolean }) {
+  return <section className="panel settings-panel" id="settings-panel-admin" role="tabpanel" aria-labelledby="settings-tab-admin" hidden={hidden}>
+    <TeacherInvitationForm />
+  </section>
+}
+
+function SettingsTab({ settings, session, isAdmin, openAdmin, onProfileChange, onSettingsChange, reload, notify }: {
   settings: Settings
   session: TeacherSession
+  isAdmin: boolean
+  openAdmin: boolean
   onProfileChange: (session: TeacherSession) => void
   onSettingsChange: (settings: Settings) => void
   reload: () => Promise<void>
   notify: (message: string) => void
 }) {
-  const [section, setSection] = useState<SettingsSection>('name')
-  const [canInviteTeachers, setCanInviteTeachers] = useState(false)
-  useEffect(() => {
-    let active = true
-    void isTeacherAdmin().then((allowed) => { if (active) setCanInviteTeachers(allowed) }).catch(() => {})
-    return () => { active = false }
-  }, [session.id])
-  const [savingSection, setSavingSection] = useState<SettingsSection | null>(null)
+  const [section, setSection] = useState<SettingsSection>(isAdmin && openAdmin ? 'admin' : 'name')
+  const settingsSections = isAdmin ? [...teacherSettingsSections, adminSettingsSection] : teacherSettingsSections
+  const [savingSection, setSavingSection] = useState<typeof teacherSettingsSections[number]['id'] | null>(null)
   const [open, setOpen] = useState(() => toLocalDateTime(settings.bookingOpen))
   const [close, setClose] = useState(() => toLocalDateTime(settings.bookingClose))
   const [newTag, setNewTag] = useState('')
@@ -1143,35 +1213,8 @@ function SettingsTab({ settings, session, onProfileChange, onSettingsChange, rel
     }
   }
 
-  const navigateTabs = (event: React.KeyboardEvent, index: number) => {
-    const count = settingsSections.length
-    let next: number
-    if (event.key === 'ArrowRight') next = (index + 1) % count
-    else if (event.key === 'ArrowLeft') next = (index - 1 + count) % count
-    else if (event.key === 'Home') next = 0
-    else if (event.key === 'End') next = count - 1
-    else return
-    event.preventDefault()
-    const tab = settingsSections[next].id
-    setSection(tab)
-    document.getElementById(`settings-tab-${tab}`)?.focus()
-  }
-
   return <div className="tab-content settings-layout">
-    {canInviteTeachers && <div className="teacher-admin-link"><a className="button secondary" href={teacherAdminUrl}><ShieldCheck size={17} /> 老師權限管理</a></div>}
-    <div className="settings-tabs" role="tablist" aria-label="教師設定">
-      {settingsSections.map(({ id, label }, index) => <button
-        key={id}
-        id={`settings-tab-${id}`}
-        type="button"
-        role="tab"
-        aria-selected={section === id}
-        aria-controls={`settings-panel-${id}`}
-        tabIndex={section === id ? 0 : -1}
-        onClick={() => setSection(id)}
-        onKeyDown={(event) => navigateTabs(event, index)}
-      >{label}</button>)}
-    </div>
+    <SettingsNavigation sections={settingsSections} value={section} onChange={setSection} />
     <section className="panel settings-panel" id="settings-panel-name" role="tabpanel" aria-labelledby="settings-tab-name" hidden={section !== 'name'}>
       <h2>老師名稱</h2>
       <p>這個名稱會顯示在家長頁面。</p>
@@ -1233,6 +1276,7 @@ function SettingsTab({ settings, session, onProfileChange, onSettingsChange, rel
         </div>)}
       </div>
     </section>
+    {isAdmin && <AdminSettingsPanel hidden={section !== 'admin'} />}
     <div className="panel security-panel"><ShieldCheck size={21} /><div><h3>權限與個資</h3><p>老師後台使用 Supabase Auth 登入；家長端只透過公開 RPC 取得已驗證學生的可選時段。</p></div></div>
   </div>
 }
