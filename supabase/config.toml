@@ -1,0 +1,4 @@
+project_id = "bookingclass"
+
+[functions.invite-teacher]
+verify_jwt = true

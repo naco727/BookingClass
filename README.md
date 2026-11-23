@@ -65,3 +65,18 @@ Vite 已設定 `base: '/BookingClass/'`。`.github/workflows/deploy-pages.yml` �
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 
 並在 Settings → Pages 將來源設為 GitHub Actions。正式網站網址為 `https://naco727.github.io/BookingClass/`；Supabase Auth 的 Site URL 與邀請回跳網址也要使用這個完整網址。
+
+## 從網頁邀請老師
+
+1. 套用 `011_teacher_invitations.sql`，再將 `invite-teacher` Edge Function 部署到同一個 Supabase 專案。
+2. 在 Supabase 的 SQL Editor 將既有 Auth 帳號加入管理員名單。用自己的 Auth User UID 替換範例值，這個步驟只在新增管理員時執行。
+
+   ```sql
+   insert into public.teacher_admins (user_id)
+   values ('00000000-0000-0000-0000-000000000000')
+   on conflict (user_id) do nothing;
+   ```
+
+3. 在 Supabase 的 Authentication → URL Configuration 確認 Site URL 與 Redirect URLs 都允許 `https://naco727.github.io/BookingClass/`。如果網站改用自訂網域，請另外更新 Edge Function 的 `TEACHER_INVITE_REDIRECT_URL` 環境變數。
+4. 若要邀請 Supabase 專案團隊以外的老師，在 Authentication → Email → SMTP Settings 設定自己的寄信服務。邀請信沿用 Auth 的 Invite user 範本。
+5. 管理員登入後，從「設定」進入「老師權限管理」，輸入老師 Email，按「寄出邀請並授權」。老師開啟邀請信即可設定密碼並登入。管理員也可直接開啟 `https://naco727.github.io/BookingClass/?mode=admin`。

@@ -4,7 +4,8 @@ import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { CalendarDays, Check, ChevronRight, Clock3, Copy, DoorOpen, GraduationCap, LogIn, MapPin, Menu, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import './styles.css'
-import { supabase } from './supabase'
+import { initialAuthUrl, supabase } from './supabase'
+import TeacherAdminPage, { isTeacherAdmin, teacherAdminUrl } from './TeacherAdminPage'
 import { addSlot, approveRegistration, bookSelections, cancelBooking, deleteRegistration, deleteSlot, deleteStudent, getCurrentTeacherSession, getParentAvailability, getPublicBookingStatus, getPublicTeacher, getSettings, getTeacherAvailability, listRegistrations, listSlots, listStudents, lookupStudents, renameLocationLabel, saveSettings, submitRegistration, teacherAddStudent, teacherBookExistingStudent, teacherCreateBooking, teacherSignIn, teacherSignOut, updateBooking, updateSlot, updateStudent, updateTeacherPassword, updateTeacherProfile } from './services'
 import type { AvailabilitySlot, Booking, BookingSelection, ContactDetails, ContactMethod, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, TeacherProfile, TeacherSession, Weekday } from './types'
 
@@ -24,7 +25,7 @@ function App() {
   const [view, setView] = useState<View>('home')
   const [mobileOpen, setMobileOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [authCallback, setAuthCallback] = useState<'invite' | 'recovery' | null>(null)
+  const [authCallback, setAuthCallback] = useState<'invite' | 'recovery' | 'invalid' | null>(null)
   const [checkingAuthCallback, setCheckingAuthCallback] = useState(true)
   const [linkTeacher, setLinkTeacher] = useState<TeacherProfile | null>(null)
   const params = new URLSearchParams(window.location.search)
@@ -34,22 +35,35 @@ function App() {
   useEffect(() => { void getPublicTeacher(teacherSlug ?? 'lin').then(setLinkTeacher) }, [teacherSlug])
   useEffect(() => {
     let active = true
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-    const queryParams = new URLSearchParams(window.location.search)
+    const hashParams = new URLSearchParams(initialAuthUrl?.hash.slice(1))
+    const queryParams = initialAuthUrl?.searchParams ?? new URLSearchParams()
     const type = hashParams.get('type') ?? queryParams.get('type')
-    const hasAuthToken = hashParams.has('access_token') || hashParams.has('code') || queryParams.has('code')
-    const callbackType = type === 'invite' ? 'invite' : type === 'recovery' ? 'recovery' : hasAuthToken ? 'invite' : null
-    if (!supabase || !callbackType) { setCheckingAuthCallback(false); return () => { active = false } }
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!active) return
-      setAuthCallback(data.session ? callbackType : null)
-      setCheckingAuthCallback(false)
-    }).catch(() => { if (active) setCheckingAuthCallback(false) })
+    const callbackToken = hashParams.get('access_token') ?? queryParams.get('access_token')
+    const callbackError = ['error', 'error_code', 'error_description'].some((key) => hashParams.has(key) || queryParams.has(key))
+    const hasCode = queryParams.has('code')
+    const callbackType = type === 'invite' || type === 'recovery' ? type : callbackToken || hasCode ? 'invite' : null
+    if (!supabase || (!callbackType && !callbackError)) { setCheckingAuthCallback(false); return }
+    const auth = supabase.auth
+    void (async () => {
+      try {
+        const { error } = await auth.initialize()
+        const { data } = await auth.getSession()
+        const codeConsumed = hasCode && !new URLSearchParams(window.location.search).has('code')
+        const matchesCallback = callbackToken ? data.session?.access_token === callbackToken : codeConsumed
+        if (active) setAuthCallback(!callbackError && !error && data.session && matchesCallback ? callbackType : 'invalid')
+      } catch {
+        if (active) setAuthCallback('invalid')
+      } finally {
+        if (active) setCheckingAuthCallback(false)
+      }
+    })()
     return () => { active = false }
   }, [])
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(null), 3600) }
   if (checkingAuthCallback) return <div className="app-shell"><div className="scoped-loading">正在確認邀請連結…</div></div>
+  if (authCallback === 'invalid') return <div className="app-shell"><main className="login-page compact-login"><section className="login-panel"><h2>邀請連結已失效</h2><p>請使用最新的邀請信，或聯絡管理員重新寄送。</p><a className="button secondary full" href={import.meta.env.BASE_URL}>返回老師登入</a></section></main></div>
   if (authCallback) return <div className="app-shell"><TeacherPasswordSetup mode={authCallback} onComplete={() => { window.history.replaceState({}, document.title, window.location.pathname); setAuthCallback(null) }} notify={notify} />{toast && <div className="toast"><Check size={17} />{toast}</div>}</div>
+  if (params.get('mode') === 'admin') return <div className="app-shell"><TeacherAdminPage /></div>
   if (scoped && !linkTeacher) return <div className="app-shell"><div className="scoped-loading">正在載入老師專屬頁面…</div></div>
   if (!scoped) return <div className="app-shell"><TeacherPage notify={notify} />{toast && <div className="toast"><Check size={17} />{toast}</div>}</div>
   return <div className="app-shell">
@@ -1002,6 +1016,12 @@ function SettingsTab({ settings, session, onProfileChange, onSettingsChange, rel
   notify: (message: string) => void
 }) {
   const [section, setSection] = useState<SettingsSection>('name')
+  const [canInviteTeachers, setCanInviteTeachers] = useState(false)
+  useEffect(() => {
+    let active = true
+    void isTeacherAdmin().then((allowed) => { if (active) setCanInviteTeachers(allowed) }).catch(() => {})
+    return () => { active = false }
+  }, [session.id])
   const [savingSection, setSavingSection] = useState<SettingsSection | null>(null)
   const [open, setOpen] = useState(() => toLocalDateTime(settings.bookingOpen))
   const [close, setClose] = useState(() => toLocalDateTime(settings.bookingClose))
@@ -1138,6 +1158,7 @@ function SettingsTab({ settings, session, onProfileChange, onSettingsChange, rel
   }
 
   return <div className="tab-content settings-layout">
+    {canInviteTeachers && <div className="teacher-admin-link"><a className="button secondary" href={teacherAdminUrl}><ShieldCheck size={17} /> 老師權限管理</a></div>}
     <div className="settings-tabs" role="tablist" aria-label="教師設定">
       {settingsSections.map(({ id, label }, index) => <button
         key={id}
