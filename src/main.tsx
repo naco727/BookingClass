@@ -350,7 +350,7 @@ function TeacherDashboard({ session, onProfileChange, notify, onLogout }: { sess
   const bookings = slots.flatMap((slot) => slot.bookings)
   const sideItems: Array<{ id: typeof tab; label: string; Icon: typeof DoorOpen }> = [{ id: 'overview', label: '總覽', Icon: DoorOpen }, { id: 'students', label: '學生檔案', Icon: Users }, { id: 'schedule', label: '固定課表', Icon: CalendarDays }, { id: 'settings', label: '搶課設定', Icon: Clock3 }]
   const bookingWindowOpen = Boolean(settings && Date.now() >= Date.parse(settings.bookingOpen) && Date.now() <= Date.parse(settings.bookingClose))
-  return <div className="teacher-shell"><aside className="teacher-sidebar"><div className="teacher-logo"><span className="brand-mark"><img className="brand-image" src={`${import.meta.env.BASE_URL}app-icon.jpg`} alt="" /></span><b>課間</b></div><div className="teacher-profile"><span className="avatar large">{session.displayName.slice(0, 1)}</span><div><b>{session.displayName}</b><small>專屬教學後台</small></div></div><div className="side-nav">{sideItems.map(({ id, label, Icon }) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={17} />{label}{id === 'students' && pending.length > 0 && <b className="nav-count">{pending.length}</b>}</button>)}</div><button className="logout" onClick={onLogout}>登出 <LogIn size={15} /></button></aside><section className="teacher-content"><div className="teacher-top"><div><span className="eyebrow">TEACHER CONSOLE · {session.displayName}</span><h1>{tab === 'overview' ? `早安，${session.displayName}。` : tab === 'students' ? '學生檔案' : tab === 'schedule' ? '每週固定課表' : '搶課設定'}</h1></div><div className="top-actions"><span className="status-pill"><span className="live-dot" /> 系統運作中</span><button className="icon-button" onClick={reload} aria-label="重新整理"><RefreshCw size={17} className={loading ? 'spin' : ''} /></button></div></div>{tab === 'overview' && <Overview registrations={registrations} students={students} slots={slots} bookings={bookings} onReview={() => setTab('students')} />}{tab === 'students' && <StudentsTab registrations={registrations} students={students} tagOptions={settings?.tagOptions ?? []} teacherId={session.id} reload={reload} notify={notify} />}{tab === 'schedule' && <ScheduleTabV2 slots={slots} students={students} regionOptions={settings?.tagOptions ?? []} teacherId={session.id} bookingWindowOpen={bookingWindowOpen} reload={reload} notify={notify} />}{tab === 'settings' && settings && <SettingsTab settings={settings} session={session} onProfileChange={onProfileChange} reload={reload} notify={notify} />}</section><TeacherBottomNav tab={tab} setTab={setTab} pendingCount={pending.length} /></div>
+  return <div className="teacher-shell"><aside className="teacher-sidebar"><div className="teacher-logo"><span className="brand-mark"><img className="brand-image" src={`${import.meta.env.BASE_URL}app-icon.jpg`} alt="" /></span><b>課間</b></div><div className="teacher-profile"><span className="avatar large">{session.displayName.slice(0, 1)}</span><div><b>{session.displayName}</b><small>專屬教學後台</small></div></div><div className="side-nav">{sideItems.map(({ id, label, Icon }) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={17} />{label}{id === 'students' && pending.length > 0 && <b className="nav-count">{pending.length}</b>}</button>)}</div><button className="logout" onClick={onLogout}>登出 <LogIn size={15} /></button></aside><section className="teacher-content"><div className="teacher-top"><div><span className="eyebrow">TEACHER CONSOLE · {session.displayName}</span><h1>{tab === 'overview' ? `早安，${session.displayName}。` : tab === 'students' ? '學生檔案' : tab === 'schedule' ? '每週固定課表' : '搶課設定'}</h1></div><div className="top-actions"><span className="status-pill"><span className="live-dot" /> 系統運作中</span><button className="icon-button" onClick={reload} aria-label="重新整理"><RefreshCw size={17} className={loading ? 'spin' : ''} /></button></div></div>{tab === 'overview' && <Overview registrations={registrations} students={students} slots={slots} bookings={bookings} onReview={() => setTab('students')} />}{tab === 'students' && <StudentsTab registrations={registrations} students={students} tagOptions={settings?.tagOptions ?? []} teacherId={session.id} reload={reload} notify={notify} />}{tab === 'schedule' && <ScheduleTabV2 slots={slots} students={students} regionOptions={settings?.tagOptions ?? []} teacherId={session.id} bookingWindowOpen={bookingWindowOpen} reload={reload} notify={notify} />}{tab === 'settings' && settings && <SettingsTab settings={settings} session={session} onProfileChange={onProfileChange} onSettingsChange={setSettings} reload={reload} notify={notify} />}</section><TeacherBottomNav tab={tab} setTab={setTab} pendingCount={pending.length} /></div>
 }
 
 function Overview({ registrations, students, slots, bookings, onReview }: { registrations: Registration[]; students: Student[]; slots: AvailabilitySlot[]; bookings: Booking[]; onReview: () => void }) { const openSlots = slots.filter((slot) => slot.open).length; return <div className="overview"><div className="metric-grid"><Metric label="待審核新生" value={registrations.filter((item) => item.status === 'pending').length} suffix="筆" accent="orange" /><Metric label="正式學生" value={students.filter((item) => item.active).length} suffix="位" accent="teal" /><Metric label="已預約課堂" value={bookings.length} suffix="堂" accent="blue" /><Metric label="目前開放空檔" value={openSlots} suffix="段" accent="purple" /></div><div className="dashboard-grid"><div className="panel attention-panel"><div className="panel-heading"><div><span className="eyebrow">NEEDS ATTENTION</span><h2>新生登記</h2></div><button className="text-button" onClick={onReview}>查看全部 <ChevronRight size={15} /></button></div>{registrations.filter((item) => item.status === 'pending').slice(0, 3).map((item) => <div className="attention-row" key={item.id}><span className="avatar">{item.name.slice(0,1)}</span><div><b>{item.name}</b><small>{item.grade} · {item.school}</small></div><span className="pending-tag">待審核</span></div>)}{!registrations.some((item) => item.status === 'pending') && <div className="empty-inline">目前沒有待審核資料</div>}</div></div></div> }
@@ -598,10 +598,26 @@ function WeeklyTimetableV2({ slots, onLongPress, onSlotClick, onBookingClick }: 
   return <div className="timetable-panel"><div className="timetable-heading"><div><span className="eyebrow">TERM TIMETABLE</span><h3>學生固定星期課表</h3><p>搶課結束後長按空堂新增學生；點按區塊編輯時段。</p></div><div className="timetable-legend"><span><i className="legend-dot duration-one" />1 小時</span><span><i className="legend-dot duration-two" />2 小時</span><span><i className="legend-dot duration-three" />3 小時以上</span></div></div><div className="timetable-grid"><div className="time-axis"><div className="time-axis-spacer" />{hours.map((hour) => <div className="time-label" key={hour}>{String(hour).padStart(2, '0')}:00</div>)}</div>{(Object.entries(weekdayLabels) as Array<[string, string]>).map(([value, label]) => { const weekday = Number(value) as Weekday; const daySlots = slots.filter((slot) => slot.weekday === weekday); return <div className="day-column" key={value}><div className="day-heading">{label.replace('星期', '')}</div>{hours.map((hour) => <div className="hour-cell" key={hour} onPointerDown={() => startPress(weekday, hour)} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => event.preventDefault()} aria-label={`${label} ${hour}:00 空白格`} />)}{daySlots.flatMap((slot) => [...slot.bookings.map((booking) => bookingEvent(booking, slot)), ...freeSegmentsForSlot(slot).map((segment) => <div className="timetable-open timetable-clickable" style={eventStyle(segment.start, segment.end)} key={`${slot.id}-${segment.start}-${segment.end}`} {...slotClickProps(slot)}><b>可預約空堂</b><small>{segment.start}–{segment.end}{slot.presetRegion ? ` · ${slot.presetRegion}` : ''}</small></div>)])}</div>})}</div></div>
 }
 
-function SettingsTab({ settings, session, onProfileChange, reload, notify }: { settings: Settings; session: TeacherSession; onProfileChange: (session: TeacherSession) => void; reload: () => Promise<void>; notify: (message: string) => void }) {
+const settingsSections = [
+  { id: 'name', label: '老師名稱' },
+  { id: 'regions', label: '地點標籤' },
+  { id: 'booking', label: '選課' },
+] as const
+type SettingsSection = typeof settingsSections[number]['id']
+
+function SettingsTab({ settings, session, onProfileChange, onSettingsChange, reload, notify }: {
+  settings: Settings
+  session: TeacherSession
+  onProfileChange: (session: TeacherSession) => void
+  onSettingsChange: (settings: Settings) => void
+  reload: () => Promise<void>
+  notify: (message: string) => void
+}) {
+  const [section, setSection] = useState<SettingsSection>('name')
+  const [savingSection, setSavingSection] = useState<SettingsSection | null>(null)
   const [open, setOpen] = useState(() => toLocalDateTime(settings.bookingOpen))
   const [close, setClose] = useState(() => toLocalDateTime(settings.bookingClose))
-  const [tagOptions, setTagOptions] = useState(settings.tagOptions ?? [])
+  const [tagOptions, setTagOptions] = useState(settings.tagOptions)
   const [newTag, setNewTag] = useState('')
   const [editingTag, setEditingTag] = useState<string | null>(null)
   const [editingValue, setEditingValue] = useState('')
@@ -612,7 +628,7 @@ function SettingsTab({ settings, session, onProfileChange, reload, notify }: { s
   const [linksConfirmed, setLinksConfirmed] = useState(() => {
     try { return sessionStorage.getItem(confirmationKey) === '1' } catch { return false }
   })
-  const [savingSettings, setSavingSettings] = useState(false)
+
   const startUnchanged = open === toLocalDateTime(settings.bookingOpen)
   const endUnchanged = close === toLocalDateTime(settings.bookingClose)
   const bookingStart = new Date(startUnchanged ? settings.bookingOpen : open)
@@ -623,34 +639,83 @@ function SettingsTab({ settings, session, onProfileChange, reload, notify }: { s
     return null
   }
   const windowError = getWindowError()
-  const regionsUnchanged = tagOptions.length === settings.tagOptions.length && tagOptions.every((tag, index) => tag === settings.tagOptions[index])
-  const showLinks = linksConfirmed && !savingSettings && !windowError && startUnchanged && endUnchanged && regionsUnchanged && !renamedLabels.length
-  const addTag = () => { const value = newTag.trim(); if (value && !tagOptions.includes(value)) { setTagOptions((current) => [...current, value]); setNewTag('') } }
-  const removeTag = (tag: string) => setTagOptions((current) => current.filter((item) => item !== tag))
-  const saveTagEdit = () => { const value = editingValue.trim(); if (!editingTag || !value || (tagOptions.includes(value) && value !== editingTag)) return; setTagOptions((current) => current.map((item) => item === editingTag ? value : item)); setRenamedLabels((current) => [...current, [editingTag, value]]); setEditingTag(null); setEditingValue('') }
-  const save = async () => {
-    if (savingSettings) return
+  const showLinks = linksConfirmed && savingSection !== 'booking' && !windowError && startUnchanged && endUnchanged
+
+  const addTag = () => {
+    const value = newTag.trim()
+    if (!value || tagOptions.includes(value)) return
+    setTagOptions((current) => [...current, value])
+    setNewTag('')
+  }
+
+  const confirmTagEdit = () => {
+    const value = editingValue.trim()
+    if (!editingTag || !value || (value !== editingTag && tagOptions.includes(value))) return
+    if (value !== editingTag) {
+      setTagOptions((current) => current.map((tag) => tag === editingTag ? value : tag))
+      setRenamedLabels((current) => [...current, [editingTag, value]])
+    }
+    setEditingTag(null)
+  }
+
+  const saveProfile = async (event: FormEvent) => {
+    event.preventDefault()
+    if (savingSection || !displayName.trim()) return
+    setSavingSection('name')
+    try {
+      const updated = await updateTeacherProfile(session.id, displayName)
+      onProfileChange(updated)
+      setDisplayName(updated.displayName)
+      notify('教師名稱已更新')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '教師名稱更新失敗')
+    } finally {
+      setSavingSection(null)
+    }
+  }
+
+  const saveRegions = async () => {
+    if (savingSection || editingTag) return
+    setSavingSection('regions')
+    try {
+      for (const [oldLabel, newLabel] of renamedLabels) {
+        await renameLocationLabel(oldLabel, newLabel, session.id)
+        setRenamedLabels((current) => current.slice(1))
+      }
+      onSettingsChange(await saveSettings({ tagOptions }, session.id))
+      if (renamedLabels.length) await reload()
+      notify('地點標籤已儲存')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '地點標籤儲存失敗')
+    } finally {
+      setSavingSection(null)
+    }
+  }
+
+  const saveBookingWindow = async () => {
+    if (savingSection) return
     const error = getWindowError()
     if (error) { notify(error); return }
-    setSavingSettings(true)
+    setSavingSection('booking')
     setLinksConfirmed(false)
     setCopiedLink(null)
     try { sessionStorage.removeItem(confirmationKey) } catch { /* Keep the in-memory state when storage is unavailable. */ }
     try {
-      for (const [oldLabel, newLabel] of renamedLabels) await renameLocationLabel(oldLabel, newLabel, session.id)
-      await saveSettings({ teacherId: session.id, bookingOpen: bookingStart.toISOString(), bookingClose: bookingEnd.toISOString(), tagOptions }, session.id)
-      setRenamedLabels((current) => current.slice(renamedLabels.length))
-      await reload()
+      const saved = await saveSettings({
+        bookingOpen: bookingStart.toISOString(),
+        bookingClose: bookingEnd.toISOString(),
+      }, session.id)
+      onSettingsChange(saved)
       setLinksConfirmed(true)
       try { sessionStorage.setItem(confirmationKey, '1') } catch { /* Keep the in-memory state when storage is unavailable. */ }
-      notify('搶課時間與地區選項已更新')
+      notify('選課期間已儲存')
     } catch (error) {
-      notify(error instanceof Error ? error.message : '儲存失敗')
+      notify(error instanceof Error ? error.message : '選課期間儲存失敗')
     } finally {
-      setSavingSettings(false)
+      setSavingSection(null)
     }
   }
-  const saveProfile = async () => { try { const updated = await updateTeacherProfile(session.id, displayName); onProfileChange(updated); notify('教師名稱已更新') } catch (error) { notify(error instanceof Error ? error.message : '教師名稱更新失敗') } }
+
   const linkFor = (mode: 'book' | 'register' | 'availability') => publicLink(session.slug, mode)
   const copyLink = async (mode: 'book' | 'register' | 'availability') => {
     try {
@@ -661,51 +726,101 @@ function SettingsTab({ settings, session, onProfileChange, reload, notify }: { s
       notify('無法複製連結，請手動選取網址')
     }
   }
-  return <div className="tab-content"><div className="panel settings-panel"><div className="eyebrow">TEACHER PROFILE · {session.displayName}</div><h2>教師設定</h2><p>設定家長看到的老師名稱、學期選課期間、專屬連結與可使用的上課地區。</p><div className="profile-name-row"><Field label="教師名稱"><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：林老師" /></Field><button className="button quiet" onClick={saveProfile}>儲存名稱</button></div><div className="eyebrow settings-section-label">TERM BOOKING WINDOW</div><h2>設定本學期選課開放期間</h2><p>學期初設定一次；家長選到的時段會成為日後固定的星期與時間。</p>
-    <div className="form-grid two">
-      <DateTimePicker label="開始時間" value={open} minimum="today" onChange={setOpen} />
-      <DateTimePicker label="結束時間" value={close} minimum={{ after: open }} onChange={setClose} />
-    </div>
-    {windowError && <div className="booking-window-error" role="alert">{windowError}</div>}
-    <div className="tag-settings"><div className="settings-subheading"><div><b>上課地區選項</b><small>學生檔案只使用地區標籤，可新增、編輯或刪除。</small></div></div><div className="tag-list">{tagOptions.map((tag) => editingTag === tag ? <span className="managed-tag editing" key={tag}><input value={editingValue} onChange={(event) => setEditingValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveTagEdit() }} /><button type="button" onClick={saveTagEdit} aria-label="儲存地區"><Check size={13} /></button><button type="button" onClick={() => setEditingTag(null)} aria-label="取消編輯"><X size={13} /></button></span> : <span className="managed-tag" key={tag}>{tag}<button type="button" onClick={() => { setEditingTag(tag); setEditingValue(tag) }} aria-label={`編輯${tag}`}><Pencil size={13} /></button><button type="button" onClick={() => removeTag(tag)} aria-label={`刪除${tag}`}><X size={13} /></button></span>)}</div><div className="add-tag-row"><input value={newTag} onChange={(event) => setNewTag(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTag() } }} placeholder="例如：內湖、松山、線上" /><button className="button quiet" type="button" onClick={addTag}><Plus size={15} /> 新增地區</button></div></div>
-    <button className="button primary" onClick={save} disabled={Boolean(windowError) || savingSettings}>{savingSettings ? '儲存中…' : '儲存設定'} <Check size={17} /></button>
-    <div className="link-panel">
-      <div className="settings-subheading">
-        <b>老師專屬家長連結</b>
-        <small aria-live="polite">{showLinks ? '只會顯示這位老師的頁面，不會顯示管理入口。' : '請先按「儲存設定」，儲存成功後即可複製連結。'}</small>
-      </div>
-      {showLinks && ([
-        ['book', '家長選課'],
-        ['availability', '老師空堂'],
-        ['register', '新生登記'],
-      ] as const).map(([mode, label]) => <div className="link-row" key={mode}>
-        <div><b>{label}</b><code title={linkFor(mode)}>{linkFor(mode)}</code></div>
-        <button type="button" className="copy-link-button" aria-label={`${copiedLink === mode ? '已複製' : '複製'}${label}連結`} onClick={() => void copyLink(mode)}>
-          {copiedLink === mode ? <Check size={15} /> : <Copy size={15} />} {copiedLink === mode ? '已複製' : '複製連結'}
-        </button>
-      </div>)}
-    </div></div><div className="panel security-panel"><ShieldCheck size={21} /><div><h3>權限與個資</h3><p>老師後台使用 Supabase Auth 登入；家長端只透過公開 RPC 取得已驗證學生的可選時段。</p></div></div></div>
-}
 
-function SettingsTabLegacy({ settings, session, onProfileChange, reload, notify }: { settings: Settings; session: TeacherSession; onProfileChange: (session: TeacherSession) => void; reload: () => Promise<void>; notify: (message: string) => void }) {
-  const [open, setOpen] = useState(settings.bookingOpen.slice(0,16))
-  const [close, setClose] = useState(settings.bookingClose.slice(0,16))
-  const [tagOptions, setTagOptions] = useState(settings.tagOptions ?? [])
-  const [newTag, setNewTag] = useState('')
-  const [editingTag, setEditingTag] = useState<string | null>(null)
-  const [editingValue, setEditingValue] = useState('')
-  const [renamedLabels, setRenamedLabels] = useState<Array<[string, string]>>([])
-  const [displayName, setDisplayName] = useState(session.displayName)
-  const [copiedLink, setCopiedLink] = useState<'book' | 'register' | 'availability' | null>(null)
-  const addTag = () => { const value = newTag.trim(); if (value && !tagOptions.includes(value)) { setTagOptions((current) => [...current, value]); setNewTag('') } }
-  const removeTag = (tag: string) => setTagOptions((current) => current.filter((item) => item !== tag))
-  const startEditTag = (tag: string) => { setEditingTag(tag); setEditingValue(tag) }
-  const saveTagEdit = () => { const value = editingValue.trim(); if (!editingTag || !value || (tagOptions.includes(value) && value !== editingTag)) return; setTagOptions((current) => current.map((item) => item === editingTag ? value : item)); setRenamedLabels((current) => [...current, [editingTag, value]]); setEditingTag(null); setEditingValue('') }
-  const save = async () => { try { for (const [oldLabel, newLabel] of renamedLabels) await renameLocationLabel(oldLabel, newLabel, session.id); await saveSettings({ teacherId: session.id, bookingOpen: new Date(open).toISOString(), bookingClose: new Date(close).toISOString(), tagOptions }, session.id); setRenamedLabels([]); await reload(); notify('搶課時間與地區選項已更新') } catch (error) { notify(error instanceof Error ? error.message : '儲存失敗') } }
-  const saveProfile = async () => { try { const updated = await updateTeacherProfile(session.id, displayName); onProfileChange(updated); notify('教師名稱已更新') } catch (error) { notify(error instanceof Error ? error.message : '教師名稱更新失敗') } }
-  const linkFor = (mode: 'book' | 'register' | 'availability') => publicLink(session.slug, mode)
-  const copyLink = async (mode: 'book' | 'register' | 'availability') => { await navigator.clipboard?.writeText(linkFor(mode)); setCopiedLink(mode); notify(mode === 'book' ? '家長選課連結已複製' : mode === 'register' ? '新生登記連結已複製' : '老師空堂連結已複製') }
-  return <div className="tab-content"><div className="panel settings-panel"><div className="eyebrow">TEACHER PROFILE · {session.displayName}</div><h2>教師設定</h2><p>設定家長看到的老師名稱、學期搶課期間、專屬連結與可使用的上課地區。</p><div className="profile-name-row"><Field label="教師名稱"><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="例如：林老師" /></Field><button className="button quiet" onClick={saveProfile}>儲存名稱</button></div><div className="eyebrow settings-section-label">TERM BOOKING WINDOW</div><h2>設定本學期搶課開放期間</h2><p>例如設定 12/1～12/30；這是學期初的一次搶課期間，家長搶到後即成為日後固定的星期與時間。</p><div className="form-grid two"><Field label="開始時間"><input type="datetime-local" value={open} onChange={(e) => setOpen(e.target.value)} /></Field><Field label="結束時間"><input type="datetime-local" value={close} onChange={(e) => setClose(e.target.value)} /></Field></div><div className="link-panel"><div className="settings-subheading"><div><b>老師專屬家長連結</b><small>複製後可直接廣發給這位老師的家長；頁面不會顯示其他老師或管理入口。</small></div></div><div className="link-row"><div><b>家長搶課</b><code>{linkFor('book')}</code></div><button className="copy-link-button" onClick={() => copyLink('book')}>{copiedLink === 'book' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'book' ? '已複製' : '複製連結'}</button></div><div className="link-row"><div><b>老師空堂</b><code>{linkFor('availability')}</code></div><button className="copy-link-button" onClick={() => copyLink('availability')}>{copiedLink === 'availability' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'availability' ? '已複製' : '複製連結'}</button></div><div className="link-row"><div><b>新生登記</b><code>{linkFor('register')}</code></div><button className="copy-link-button" onClick={() => copyLink('register')}>{copiedLink === 'register' ? <Check size={15} /> : <Copy size={15} />} {copiedLink === 'register' ? '已複製' : '複製連結'}</button></div></div><div className="tag-settings"><div className="settings-subheading"><div><b>上課地區選項</b><small>學生檔案只使用地區標籤。老師可新增、編輯、刪除，例如內湖、松山、線上。</small></div></div><div className="tag-list">{tagOptions.map((tag) => editingTag === tag ? <span className="managed-tag editing" key={tag}><input value={editingValue} onChange={(e) => setEditingValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveTagEdit() }} /><button type="button" onClick={saveTagEdit} aria-label="儲存地區"><Check size={13} /></button><button type="button" onClick={() => setEditingTag(null)} aria-label="取消編輯"><X size={13} /></button></span> : <span className="managed-tag" key={tag}>{tag}<button type="button" onClick={() => startEditTag(tag)} aria-label={`編輯${tag}`}><Pencil size={13} /></button><button type="button" onClick={() => removeTag(tag)} aria-label={`刪除${tag}`}><X size={13} /></button></span>)}</div><div className="add-tag-row"><input value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }} placeholder="例如：內湖、松山、線上" /><button className="button quiet" type="button" onClick={addTag}><Plus size={15} /> 新增地區</button></div></div><button className="button primary" onClick={save}>儲存設定 <Check size={17} /></button></div><div className="panel security-panel"><ShieldCheck size={21} /><div><h3>權限與個資</h3><p>老師後台使用 Supabase Auth 登入；家長端只透過公開 RPC 取得已驗證學生的可選空檔，不直接讀取 students 或 bookings 資料表。所有查詢都帶入這位老師的 teacher_id。</p></div></div></div>
+  const navigateTabs = (event: React.KeyboardEvent, index: number) => {
+    const count = settingsSections.length
+    let next: number
+    if (event.key === 'ArrowRight') next = (index + 1) % count
+    else if (event.key === 'ArrowLeft') next = (index - 1 + count) % count
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = count - 1
+    else return
+    event.preventDefault()
+    const tab = settingsSections[next].id
+    setSection(tab)
+    document.getElementById(`settings-tab-${tab}`)?.focus()
+  }
+
+  return <div className="tab-content settings-layout">
+    <div className="settings-tabs" role="tablist" aria-label="教師設定">
+      {settingsSections.map(({ id, label }, index) => <button
+        key={id}
+        id={`settings-tab-${id}`}
+        type="button"
+        role="tab"
+        aria-selected={section === id}
+        aria-controls={`settings-panel-${id}`}
+        tabIndex={section === id ? 0 : -1}
+        onClick={() => setSection(id)}
+        onKeyDown={(event) => navigateTabs(event, index)}
+      >{label}</button>)}
+    </div>
+    <section className="panel settings-panel" id="settings-panel-name" role="tabpanel" aria-labelledby="settings-tab-name" hidden={section !== 'name'}>
+      <h2>老師名稱</h2>
+      <p>這個名稱會顯示在家長頁面。</p>
+      <form className="profile-name-row" onSubmit={saveProfile}>
+        <Field label="老師名稱">
+          <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：林老師" required disabled={savingSection === 'name'} />
+        </Field>
+        <button type="submit" className="button primary" disabled={Boolean(savingSection) || !displayName.trim()}>{savingSection === 'name' ? '儲存中…' : '儲存名稱'}</button>
+      </form>
+    </section>
+    <section className="panel settings-panel" id="settings-panel-regions" role="tabpanel" aria-labelledby="settings-tab-regions" hidden={section !== 'regions'}>
+      <h2>地點標籤</h2>
+      <p>地點標籤可用於學生檔案和課表限區。</p>
+      <fieldset className="settings-fields" disabled={savingSection === 'regions'}>
+        <div className="tag-list">{tagOptions.map((tag) => editingTag === tag
+          ? <span className="managed-tag editing" key={tag}>
+            <input aria-label="新標籤名稱" value={editingValue} onChange={(event) => setEditingValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') confirmTagEdit() }} />
+            <button type="button" onClick={confirmTagEdit} aria-label="確認改名"><Check size={13} /></button>
+            <button type="button" onClick={() => setEditingTag(null)} aria-label="取消編輯"><X size={13} /></button>
+          </span>
+          : <span className="managed-tag" key={tag}>
+            {tag}
+            <button type="button" onClick={() => { setEditingTag(tag); setEditingValue(tag) }} aria-label={`編輯${tag}`}><Pencil size={13} /></button>
+            <button type="button" onClick={() => setTagOptions((current) => current.filter((item) => item !== tag))} aria-label={`刪除${tag}`}><X size={13} /></button>
+          </span>)}</div>
+        <div className="add-tag-row">
+          <input aria-label="新增地點標籤" value={newTag} onChange={(event) => setNewTag(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addTag() }} placeholder="例如：內湖、松山、線上" />
+          <button className="button quiet" type="button" onClick={addTag}><Plus size={15} /> 新增地區</button>
+        </div>
+        <button className="button primary settings-save-regions" type="button" onClick={() => void saveRegions()} disabled={Boolean(savingSection) || Boolean(editingTag)}>
+          {savingSection === 'regions' ? '儲存中…' : '儲存地點標籤'} <Check size={17} />
+        </button>
+      </fieldset>
+    </section>
+    <section className="panel settings-panel" id="settings-panel-booking" role="tabpanel" aria-labelledby="settings-tab-booking" hidden={section !== 'booking'}>
+      <h2>設定本學期選課開放期間</h2>
+      <p>家長在這段期間選課，選到的課會成為每週固定時段。</p>
+      <fieldset className="settings-fields" disabled={savingSection === 'booking'}>
+        <div className="form-grid two">
+          <DateTimePicker label="開始時間" value={open} minimum="today" onChange={setOpen} />
+          <DateTimePicker label="結束時間" value={close} minimum={{ after: open }} onChange={setClose} />
+        </div>
+        {windowError && <div className="booking-window-error" role="alert">{windowError}</div>}
+        <button className="button primary" type="button" onClick={() => void saveBookingWindow()} disabled={Boolean(windowError) || Boolean(savingSection)}>
+          {savingSection === 'booking' ? '儲存中…' : '儲存選課期間'} <Check size={17} />
+        </button>
+      </fieldset>
+      <div className="link-panel">
+        <div className="settings-subheading">
+          <b>老師專屬家長連結</b>
+          <small aria-live="polite">{showLinks ? '只會顯示這位老師的頁面。' : '儲存選課期間後，即可複製連結。'}</small>
+        </div>
+        {showLinks && ([
+          ['book', '家長選課'],
+          ['availability', '老師空堂'],
+          ['register', '新生登記'],
+        ] as const).map(([mode, label]) => <div className="link-row" key={mode}>
+          <div><b>{label}</b><code title={linkFor(mode)}>{linkFor(mode)}</code></div>
+          <button type="button" className="copy-link-button" aria-label={`${copiedLink === mode ? '已複製' : '複製'}${label}連結`} onClick={() => void copyLink(mode)}>
+            {copiedLink === mode ? <Check size={15} /> : <Copy size={15} />} {copiedLink === mode ? '已複製' : '複製連結'}
+          </button>
+        </div>)}
+      </div>
+    </section>
+    <div className="panel security-panel"><ShieldCheck size={21} /><div><h3>權限與個資</h3><p>老師後台使用 Supabase Auth 登入；家長端只透過公開 RPC 取得已驗證學生的可選時段。</p></div></div>
+  </div>
 }
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>)

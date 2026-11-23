@@ -335,22 +335,35 @@ export async function teacherBookExistingStudent(studentId: string, slotId: stri
   db.bookings.push(booking); persistMock(); return clone(booking)
 }
 
+const mockSettingsFor = (teacherId: string): Settings => db.settings[teacherId] ?? {
+  teacherId,
+  bookingOpen: new Date().toISOString(),
+  bookingClose: new Date(Date.now() + 86400000 * 30).toISOString(),
+  tagOptions: [],
+}
+
 export async function getSettings(teacherId: string): Promise<Settings> {
   if (supabase) {
     const { data, error } = await supabase.from('booking_settings').select('*').eq('teacher_id', teacherId).single()
     if (error) throw error
     return normalizeSettings(data)
   }
-  return clone(db.settings[teacherId] ?? { teacherId, bookingOpen: new Date().toISOString(), bookingClose: new Date(Date.now() + 86400000 * 30).toISOString(), tagOptions: [] })
+  return clone(mockSettingsFor(teacherId))
 }
 
-export async function saveSettings(settings: Settings, teacherId: string): Promise<Settings> {
+export async function saveSettings(changes: Partial<Omit<Settings, 'teacherId'>>, teacherId: string): Promise<Settings> {
   if (supabase) {
-    const { data, error } = await supabase.from('booking_settings').upsert({ teacher_id: teacherId, booking_open: settings.bookingOpen, booking_close: settings.bookingClose, tag_options: settings.tagOptions }).select('*').single()
+    const { bookingOpen, bookingClose, tagOptions } = changes
+    const fields = {
+      ...(bookingOpen !== undefined && { booking_open: bookingOpen }),
+      ...(bookingClose !== undefined && { booking_close: bookingClose }),
+      ...(tagOptions !== undefined && { tag_options: tagOptions }),
+    }
+    const { data, error } = await supabase.from('booking_settings').update(fields).eq('teacher_id', teacherId).select('*').single()
     if (error) throw error
     return normalizeSettings(data)
   }
-  db.settings[teacherId] = clone({ ...settings, teacherId })
+  db.settings[teacherId] = clone({ ...mockSettingsFor(teacherId), ...changes, teacherId })
   persistMock()
   return clone(db.settings[teacherId])
 }
