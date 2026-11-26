@@ -6,6 +6,7 @@ import { CalendarDays, Check, ChevronRight, Clock3, Copy, DoorOpen, GraduationCa
 import './styles.css'
 import { initialAuthUrl, supabase } from './supabase'
 import { TeacherInvitationForm } from './TeacherInvitationForm'
+import { ReleaseNotice } from './ReleaseNotice'
 import { addSlot, approveRegistration, bookSelections, cancelBooking, deleteRegistration, deleteSlot, deleteStudent, getCurrentTeacherSession, getParentAvailability, getPublicBookingStatus, getPublicTeacher, getSettings, getTeacherAvailability, listRegistrations, listSlots, listStudents, lookupStudents, renameLocationLabel, saveSettings, submitRegistration, teacherAddStudent, teacherBookExistingStudent, teacherCreateBooking, teacherSignIn, teacherSignOut, updateBooking, updateSlot, updateStudent, updateTeacherPassword, updateTeacherProfile } from './services'
 import type { TeacherConsoleSession } from './services'
 import type { AvailabilitySlot, Booking, BookingSelection, ContactDetails, ContactMethod, MaterialPlan, PublicAvailability, PublicStudent, Registration, Region, Settings, Student, TeacherProfile, TeacherSession, Weekday } from './types'
@@ -587,7 +588,10 @@ function TeacherPage({ openAdmin, notify }: { openAdmin: boolean; notify: (messa
   }
   if (checkingSession) return <div className="compact-login"><div className="login-panel"><div className="eyebrow">TEACHER ACCESS</div><h2>確認登入狀態…</h2></div></div>
   if (!session) return <div className="login-page compact-login"><div className="login-panel"><div className="login-brand-mark"><img className="brand-image" src={`${import.meta.env.BASE_URL}app-icon.jpg`} alt="課間" /></div><div className="eyebrow">TEACHER ACCESS</div><h2>登入老師後台</h2><form onSubmit={signIn}><Field label="Email"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></Field><Field label="密碼"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field><button className="button primary full" disabled={loading}>{loading ? '登入中…' : '登入後台'} <LogIn size={17} /></button></form></div></div>
-  return <TeacherDashboard session={session} openAdmin={openAdmin} onProfileChange={(teacher) => setSession({ ...session, teacher })} notify={notify} onLogout={async () => { await teacherSignOut(); setSession(null) }} />
+  return <>
+    <TeacherDashboard session={session} openAdmin={openAdmin} onProfileChange={(teacher) => setSession({ ...session, teacher })} notify={notify} onLogout={async () => { await teacherSignOut(); setSession(null) }} />
+    <ReleaseNotice key={session.userId} userId={session.userId} />
+  </>
 }
 
 function TeacherDashboard({ session: { teacher, isAdmin }, openAdmin, onProfileChange, notify, onLogout }: { session: TeacherConsoleSession; openAdmin: boolean; onProfileChange: (session: TeacherSession) => void; notify: (message: string) => void; onLogout: () => void }) {

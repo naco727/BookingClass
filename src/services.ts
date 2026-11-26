@@ -488,7 +488,7 @@ export async function updateTeacherProfile(teacherId: string, displayName: strin
   return clone(teacher)
 }
 
-export type TeacherConsoleSession = { teacher: TeacherSession | null; isAdmin: boolean }
+export type TeacherConsoleSession = { userId: string; teacher: TeacherSession | null; isAdmin: boolean }
 
 async function loadTeacherConsoleSession(user: User): Promise<TeacherConsoleSession | null> {
   if (!supabase) return null
@@ -502,7 +502,7 @@ async function loadTeacherConsoleSession(user: User): Promise<TeacherConsoleSess
   const isAdmin = admin.data === true
   const teacher = profile?.data ? { id: profile.data.id, slug: profile.data.slug, displayName: profile.data.display_name } : null
   if (!teacher && admin.error) throw admin.error
-  return teacher || isAdmin ? { teacher, isAdmin } : null
+  return teacher || isAdmin ? { userId: user.id, teacher, isAdmin } : null
 }
 
 export async function teacherSignIn(email: string, password: string): Promise<TeacherConsoleSession> {
@@ -517,7 +517,7 @@ export async function teacherSignIn(email: string, password: string): Promise<Te
   if (password !== 'teacher123' || !['teacher@demo.tw', 'teacherb@demo.tw'].includes(email)) throw new Error('Demo 帳號或密碼不正確')
   const session = clone(db.teachers.find((teacher) => teacher.id === (email === 'teacherb@demo.tw' ? 'teacher-b' : 'teacher-a')) ?? demoTeachers[0])
   if (typeof localStorage !== 'undefined') localStorage.setItem(mockSessionKey, JSON.stringify(session))
-  return { teacher: session, isAdmin: false }
+  return { userId: session.id, teacher: session, isAdmin: false }
 }
 
 export async function getCurrentTeacherSession(): Promise<TeacherConsoleSession | null> {
@@ -527,7 +527,7 @@ export async function getCurrentTeacherSession(): Promise<TeacherConsoleSession 
     return data.session ? loadTeacherConsoleSession(data.session.user) : null
   }
   if (typeof localStorage === 'undefined') return null
-  try { const session = JSON.parse(localStorage.getItem(mockSessionKey) ?? 'null') as TeacherSession | null; return session?.id && db.teachers.some((teacher) => teacher.id === session.id) ? { teacher: session, isAdmin: false } : null } catch { return null }
+  try { const session = JSON.parse(localStorage.getItem(mockSessionKey) ?? 'null') as TeacherSession | null; return session?.id && db.teachers.some((teacher) => teacher.id === session.id) ? { userId: session.id, teacher: session, isAdmin: false } : null } catch { return null }
 }
 
 export async function teacherSignOut(): Promise<void> { if (supabase) await supabase.auth.signOut(); if (typeof localStorage !== 'undefined') localStorage.removeItem(mockSessionKey) }

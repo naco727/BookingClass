@@ -66,6 +66,8 @@ Vite 已設定 `base: '/BookingClass/'`。`.github/workflows/deploy-pages.yml` �
 
 並在 Settings → Pages 將來源設為 GitHub Actions。正式網站網址為 `https://naco727.github.io/BookingClass/`；Supabase Auth 的 Site URL 與邀請回跳網址也要使用這個完整網址。
 
+發布新版時，更新 `package.json` 和 `package-lock.json` 的版本號，以及 `src/ReleaseNotice.tsx` 的更新內容。教師後台會依帳號和版本在目前瀏覽器記住已確認的通知。
+
 ## 從網頁邀請老師
 
 1. 套用 `011_teacher_invitations.sql`，再將 `invite-teacher` Edge Function 部署到同一個 Supabase 專案。

@@ -873,3 +873,19 @@ body:has(.picker-dialog[open]) { overflow:hidden; }
 .teacher-admin-feedback strong { display:block; }
 .teacher-admin-feedback svg { flex:none; margin-top:2px; }
 .teacher-admin-feedback.failure { background:#fff1ed; color:#923e31; }
+
+.release-notice {
+  position:fixed;
+  inset:0;
+  width:min(440px, calc(100% - 24px));
+  margin:auto;
+  border:1px solid #dce7de;
+  color:var(--ink);
+}
+.release-notice::backdrop { background:rgba(16,46,44,.36); }
+body:has(.release-notice[open]) { overflow:hidden; }
+.release-notice-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.release-notice-heading h2 { margin:0; }
+.release-version { padding:4px 10px; border-radius:999px; background:#e7f1ea; color:#356358; font-size:13px; font-weight:700; }
+.release-notice ul { margin:18px 0 24px; padding-inline-start:1.25em; color:#456762; font-size:14px; line-height:1.65; }
+.release-notice li + li { margin-top:8px; }
