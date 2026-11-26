@@ -312,7 +312,7 @@ footer { margin-top:auto; padding:25px 5.5vw; display:flex; justify-content:spac
 .teacher-empty { margin-top:16px; }
 .booking-closed-state { min-height:240px; display:grid; place-items:center; align-content:center; gap:9px; margin:20px auto 60px; padding:35px 20px; text-align:center; background:#fffdfa; border:1px solid #e2e8e1; border-radius:16px; box-shadow:var(--shadow); color:#8d9e96; }
 .booking-closed-state svg { color:#7ca995; }.booking-closed-state h2 { margin:0; color:#426b60; font-size:22px; }.booking-closed-state p { margin:0; font-size:12px; }
-.timetable-clickable { cursor:pointer; }
+.timetable-clickable { cursor:pointer; touch-action:manipulation; user-select:none; }
 .timetable-clickable:hover { filter:brightness(.97); }
 .danger-button { border:1px solid #ead0ca; background:#fff2ef; color:#b86458; border-radius:7px; padding:10px 14px; font-size:12px; }
 .slot-open-toggle { display:flex; align-items:center; gap:8px; color:#5d776f; font-size:12px; margin-top:18px; }

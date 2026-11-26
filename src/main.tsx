@@ -602,7 +602,6 @@ function TeacherDashboard({ session: { teacher, isAdmin }, openAdmin, onProfileC
   const pending = registrations.filter((item) => item.status === 'pending')
   const bookings = slots.flatMap((slot) => slot.bookings)
   const sideItems: Array<{ id: typeof tab; label: string; Icon: typeof DoorOpen }> = [{ id: 'overview', label: '總覽', Icon: DoorOpen }, { id: 'students', label: '學生檔案', Icon: Users }, { id: 'schedule', label: '固定課表', Icon: CalendarDays }, { id: 'settings', label: '設定', Icon: Clock3 }]
-  const bookingWindowOpen = Boolean(settings && Date.now() >= Date.parse(settings.bookingOpen) && Date.now() <= Date.parse(settings.bookingClose))
   const displayName = teacher?.displayName ?? '管理員'
   return <div className="teacher-shell">
     <aside className="teacher-sidebar">
@@ -618,7 +617,7 @@ function TeacherDashboard({ session: { teacher, isAdmin }, openAdmin, onProfileC
       </div>
       {tab === 'overview' && <Overview registrations={registrations} students={students} slots={slots} bookings={bookings} onReview={() => setTab('students')} />}
       {tab === 'students' && teacher && <StudentsTab registrations={registrations} students={students} tagOptions={settings?.tagOptions ?? []} teacherId={teacher.id} reload={reload} notify={notify} />}
-      {tab === 'schedule' && teacher && <ScheduleTabV2 slots={slots} students={students} regionOptions={settings?.tagOptions ?? []} teacherId={teacher.id} bookingWindowOpen={bookingWindowOpen} reload={reload} notify={notify} />}
+      {tab === 'schedule' && teacher && <ScheduleTabV2 slots={slots} students={students} regionOptions={settings?.tagOptions ?? []} teacherId={teacher.id} bookingClose={settings?.bookingClose} reload={reload} notify={notify} />}
       {tab === 'settings' && (teacher && settings
         ? <SettingsTab settings={settings} session={teacher} isAdmin={isAdmin} openAdmin={openAdmin} onProfileChange={onProfileChange} onSettingsChange={setSettings} reload={reload} notify={notify} />
         : isAdmin && !loading && <div className="tab-content settings-layout"><SettingsNavigation sections={[adminSettingsSection]} value="admin" /><AdminSettingsPanel /></div>)}
@@ -802,13 +801,17 @@ function TeacherBottomNav({ tab, setTab, pendingCount }: { tab: 'overview' | 'st
   return <nav className="teacher-bottom-nav" aria-label="老師後台分頁">{items.map(({ id, label, Icon }) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><span className="bottom-nav-icon"><Icon size={18} />{id === 'students' && pendingCount > 0 && <b>{pendingCount}</b>}</span><small>{label}</small></button>)}</nav>
 }
 
-type TimetableAction = { type: 'slot'; slot: AvailabilitySlot } | { type: 'booking'; booking: Booking; slot: AvailabilitySlot }
+type TimeRange = { start: string; end: string }
+type TimetableAction =
+  | { type: 'slot'; slot: AvailabilitySlot }
+  | { type: 'booking'; booking: Booking; slot: AvailabilitySlot }
+  | { type: 'add-student'; slot: AvailabilitySlot; gap: TimeRange }
 
 type ScheduleMode = 'availability' | 'calendar'
 
 type DirectBookingTarget = { slot: AvailabilitySlot; start: string; end: string }
 
-function ScheduleTabV2({ slots, students, regionOptions, teacherId, bookingWindowOpen, reload, notify }: { slots: AvailabilitySlot[]; students: Student[]; regionOptions: string[]; teacherId: string; bookingWindowOpen: boolean; reload: () => Promise<void>; notify: (message: string) => void }) {
+function ScheduleTabV2({ slots, students, regionOptions, teacherId, bookingClose, reload, notify }: { slots: AvailabilitySlot[]; students: Student[]; regionOptions: string[]; teacherId: string; bookingClose?: string; reload: () => Promise<void>; notify: (message: string) => void }) {
   const [adding, setAdding] = useState(false)
   const [weekday, setWeekday] = useState<Weekday>(1)
   const [start, setStart] = useState('13:00')
@@ -817,9 +820,13 @@ function ScheduleTabV2({ slots, students, regionOptions, teacherId, bookingWindo
   const [note, setNote] = useState('')
   const [action, setAction] = useState<TimetableAction | null>(null)
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('availability')
-  const [directTarget, setDirectTarget] = useState<DirectBookingTarget | null>(null)
   const [deletingAll, setDeletingAll] = useState(false)
-  const beginAdd = (nextWeekday: Weekday, nextStart: string) => { if (bookingWindowOpen) { notify('目前仍在家長搶課期間，請由家長頁面預約；搶課結束後可由老師直接新增學生'); return } const slot = slots.find((item) => item.weekday === nextWeekday && toMinutes(nextStart) >= toMinutes(item.start) && toMinutes(nextStart) < toMinutes(item.end)); if (!slot) { notify('請先在「設定」建立包含這個時間的空堂'); return } const gap = freeSegmentsForSlot(slot).find((item) => toMinutes(nextStart) >= toMinutes(item.start) && toMinutes(nextStart) < toMinutes(item.end)); if (!gap) { notify('剩餘 30 分鐘或更少的空檔不開放新增學生'); return } const index = timeOptions.indexOf(nextStart); const proposedEnd = timeOptions[index + 2] ?? gap.end; setDirectTarget({ slot, start: nextStart, end: toMinutes(proposedEnd) <= toMinutes(gap.end) ? proposedEnd : gap.end }) }
+  const beginAdd = (slot: AvailabilitySlot, gap: TimeRange) => {
+    if (!bookingClose) { notify('請先載入本學期選課設定'); return }
+    if (Date.now() <= Date.parse(bookingClose)) { notify('家長選課結束後，即可在課表新增正式學生'); return }
+    if (!slot.open) { notify('請先開放這個空堂時段'); return }
+    setAction({ type: 'add-student', slot, gap })
+  }
   const save = async () => { if (toMinutes(start) >= toMinutes(end)) { notify('結束時間必須晚於開始時間'); return } try { await addSlot({ weekday, start, end, presetRegion: region, open: true, note }, teacherId); setAdding(false); await reload(); notify('已新增固定時段') } catch (error) { notify(error instanceof Error ? error.message : '新增失敗') } }
   const cancel = async (booking: Booking) => { if (!window.confirm(`確定要取消 ${booking.studentName} 的預約嗎？\n${booking.start}–${booking.end}`)) return; try { await cancelBooking(booking.id, teacherId); setAction(null); await reload(); notify('預約已取消，空檔已重新開放') } catch (error) { notify(error instanceof Error ? error.message : '取消失敗') } }
   const clearSchedule = async () => {
@@ -828,7 +835,25 @@ function ScheduleTabV2({ slots, students, regionOptions, teacherId, bookingWindo
     setDeletingAll(true)
     try { for (const slot of slots) await deleteSlot(slot.id, teacherId); await reload(); notify('現有課表已刪除') } catch (error) { notify(error instanceof Error ? error.message : '刪除課表失敗') } finally { setDeletingAll(false) }
   }
-  return <div className="tab-content"><div className="schedule-actions schedule-actions-compact"><div><h2>本學期固定課表</h2><p>先設定每週空堂，再切換到課表編輯預約。</p></div><button type="button" className="button danger-outline" onClick={() => void clearSchedule()} disabled={deletingAll || !slots.length}>刪除現有課表</button></div><div className="schedule-mode-switch" role="tablist" aria-label="設定與課表"><button className={scheduleMode === 'availability' ? 'active' : ''} onClick={() => setScheduleMode('availability')}>設定</button><button className={scheduleMode === 'calendar' ? 'active' : ''} onClick={() => setScheduleMode('calendar')}>課表</button></div>{scheduleMode === 'availability' ? <AvailabilityRows slots={slots} regionOptions={regionOptions} teacherId={teacherId} reload={reload} notify={notify} /> : <><div className="schedule-edit-hint"><Clock3 size={15} /> 搶課結束後長按空白格新增正式學生；點按彩色區塊查看學生或編輯時段。</div><WeeklyTimetableV2 slots={slots} students={students} onLongPress={beginAdd} onSlotClick={(slot) => setAction({ type: 'slot', slot })} onBookingClick={(booking, slot) => setAction({ type: 'booking', booking, slot })} />{!slots.length && <div className="public-empty teacher-empty"><Clock3 size={26} /><h3>目前沒有時段</h3><p>請切換到設定新增上午或下午時段。</p></div>}</>}{adding && <div className="modal-backdrop"><div className="modal"><button className="modal-close" onClick={() => setAdding(false)}><X /></button><div className="eyebrow">NEW SLOT</div><h2>新增固定時段</h2><div className="form-grid two"><Field label="星期"><select value={weekday} onChange={(e) => setWeekday(Number(e.target.value) as Weekday)}>{(Object.entries(weekdayLabels) as Array<[string, string]>).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field><Field label="預先限區"><select value={region ?? ''} onChange={(e) => setRegion((e.target.value || null) as Region | null)}><option value="">不指定</option>{regionOptions.map((item) => <option key={item}>{item}</option>)}</select></Field></div><div className="form-grid two"><Field label="開始"><TimePicker value={start} onChange={setStart} /></Field><Field label="結束"><TimePicker value={end} options={timeOptions.filter((time) => toMinutes(time) > toMinutes(start))} onChange={setEnd} /></Field></div><Field label="公開備註"><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="選填" /></Field><div className="modal-actions"><button className="button quiet" onClick={() => setAdding(false)}>取消</button><button className="button primary" onClick={save}>建立時段</button></div></div></div>}{directTarget && <ExistingStudentBookingModal target={directTarget} students={students} teacherId={teacherId} close={() => setDirectTarget(null)} reload={reload} notify={notify} />}{action?.type === 'slot' && <SlotEditorModal slot={action.slot} regionOptions={regionOptions} teacherId={teacherId} close={() => setAction(null)} reload={reload} notify={notify} />}{action?.type === 'booking' && <BookingActionModal booking={action.booking} slot={action.slot} teacherId={teacherId} close={() => setAction(null)} cancel={cancel} reload={reload} notify={notify} />}</div>
+  return <div className="tab-content">
+    <div className="schedule-actions schedule-actions-compact">
+      <div><h2>本學期固定課表</h2><p>先設定每週空堂，再切換到課表編輯預約。</p></div>
+      <button type="button" className="button danger-outline" onClick={() => void clearSchedule()} disabled={deletingAll || !slots.length}>刪除現有課表</button>
+    </div>
+    <div className="schedule-mode-switch" role="tablist" aria-label="設定與課表">
+      <button className={scheduleMode === 'availability' ? 'active' : ''} onClick={() => setScheduleMode('availability')}>設定</button>
+      <button className={scheduleMode === 'calendar' ? 'active' : ''} onClick={() => setScheduleMode('calendar')}>課表</button>
+    </div>
+    {scheduleMode === 'availability' ? <AvailabilityRows slots={slots} regionOptions={regionOptions} teacherId={teacherId} reload={reload} notify={notify} /> : <>
+      <div className="schedule-edit-hint"><Clock3 size={15} /> 選課結束後，快速點兩下空堂即可排入正式學生。點一下區塊可編輯。</div>
+      <WeeklyTimetableV2 slots={slots} students={students} onGapDoubleTap={beginAdd} onSlotClick={(slot) => setAction({ type: 'slot', slot })} onBookingClick={(booking, slot) => setAction({ type: 'booking', booking, slot })} />
+      {!slots.length && <div className="public-empty teacher-empty"><Clock3 size={26} /><h3>目前沒有時段</h3><p>請切換到設定新增上午或下午時段。</p></div>}
+    </>}
+    {adding && <div className="modal-backdrop"><div className="modal"><button className="modal-close" onClick={() => setAdding(false)}><X /></button><div className="eyebrow">NEW SLOT</div><h2>新增固定時段</h2><div className="form-grid two"><Field label="星期"><select value={weekday} onChange={(e) => setWeekday(Number(e.target.value) as Weekday)}>{(Object.entries(weekdayLabels) as Array<[string, string]>).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field><Field label="預先限區"><select value={region ?? ''} onChange={(e) => setRegion((e.target.value || null) as Region | null)}><option value="">不指定</option>{regionOptions.map((item) => <option key={item}>{item}</option>)}</select></Field></div><div className="form-grid two"><Field label="開始"><TimePicker value={start} onChange={setStart} /></Field><Field label="結束"><TimePicker value={end} options={timeOptions.filter((time) => toMinutes(time) > toMinutes(start))} onChange={setEnd} /></Field></div><Field label="公開備註"><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="選填" /></Field><div className="modal-actions"><button className="button quiet" onClick={() => setAdding(false)}>取消</button><button className="button primary" onClick={save}>建立時段</button></div></div></div>}
+    {action?.type === 'add-student' && <ExistingStudentBookingModal slot={action.slot} gap={action.gap} students={students} teacherId={teacherId} close={() => setAction(null)} reload={reload} notify={notify} />}
+    {action?.type === 'slot' && <SlotEditorModal slot={action.slot} regionOptions={regionOptions} teacherId={teacherId} close={() => setAction(null)} reload={reload} notify={notify} />}
+    {action?.type === 'booking' && <BookingActionModal booking={action.booking} slot={action.slot} teacherId={teacherId} close={() => setAction(null)} cancel={cancel} reload={reload} notify={notify} />}
+  </div>
 }
 
 function DirectStudentBookingModal({ target, regionOptions, teacherId, close, reload, notify }: { target: DirectBookingTarget; regionOptions: string[]; teacherId: string; close: () => void; reload: () => Promise<void>; notify: (message: string) => void }) {
@@ -853,17 +878,65 @@ function DirectStudentBookingModal({ target, regionOptions, teacherId, close, re
   return <div className="modal-backdrop"><div className="modal direct-booking-modal"><button className="modal-close" onClick={close}><X /></button><div className="eyebrow">DIRECT STUDENT</div><h2>新增學生</h2><p>{weekdayLabels[target.slot.weekday]} {target.slot.start}–{target.slot.end} · 搶課結束後由老師直接建立</p><div className="form-grid two"><Field label="學生姓名"><input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} /></Field><Field label="年級"><input value={grade} maxLength={40} onChange={(event) => setGrade(event.target.value)} /></Field><Field label="學校"><input value={school} maxLength={120} onChange={(event) => setSchool(event.target.value)} /></Field><Field label="聯絡電話"><input value={phone} maxLength={40} inputMode="tel" onChange={(event) => setPhone(event.target.value)} /></Field></div><Field label="欲加強項目"><input value={focus} maxLength={240} onChange={(event) => setFocus(event.target.value)} /></Field><Field label="詳盡地址"><input value={location} maxLength={240} onChange={(event) => setLocation(event.target.value)} /></Field><div className="form-grid two"><Field label="上課地區"><select value={region} onChange={(event) => setRegion(event.target.value)}><option value="">請選擇地區</option>{regionOptions.map((item) => <option key={item}>{item}</option>)}</select></Field><Field label="講義安排"><select value={material} onChange={(event) => setMaterial(event.target.value as MaterialPlan)}><option>自編</option><option>已有</option><option>購買市售</option></select></Field></div><div className="form-grid two"><Field label="開始"><select value={start} onChange={(event) => setStart(event.target.value)}>{timeOptions.filter((time) => toMinutes(time) >= toMinutes(target.slot.start) && toMinutes(time) < toMinutes(target.slot.end)).map((time) => <option key={time}>{time}</option>)}</select></Field><Field label="結束"><select value={end} onChange={(event) => setEnd(event.target.value)}>{endOptions.map((time) => <option key={time}>{time}</option>)}</select></Field></div><div className="modal-actions"><button className="button quiet" onClick={close}>取消</button><button className="button primary" disabled={saving} onClick={() => void save}>{saving ? '建立中…' : '新增學生並預約'}</button></div></div></div>
 }
 
-function ExistingStudentBookingModal({ target, students, teacherId, close, reload, notify }: { target: DirectBookingTarget; students: Student[]; teacherId: string; close: () => void; reload: () => Promise<void>; notify: (message: string) => void }) {
-  const eligibleStudents = students.filter((student) => student.active && student.region)
+function ExistingStudentBookingModal({ slot, gap, students, teacherId, close, reload, notify }: { slot: AvailabilitySlot; gap: TimeRange; students: Student[]; teacherId: string; close: () => void; reload: () => Promise<void>; notify: (message: string) => void }) {
+  const region = slot.presetRegion ?? slot.dynamicRegion
+  const eligibleStudents = students.filter((student) => student.active && student.region && (!region || student.region === region))
+  const gapTimes = [gap.start, ...timeOptions.filter((time) => toMinutes(gap.start) < toMinutes(time) && toMinutes(time) < toMinutes(gap.end)), gap.end]
   const [studentId, setStudentId] = useState(eligibleStudents[0]?.id ?? '')
-  const [start, setStart] = useState(target.start)
-  const [end, setEnd] = useState(target.end)
+  const [start, setStart] = useState(gap.start)
+  const [end, setEnd] = useState(() => gapTimes.find((time) => toMinutes(time) >= toMinutes(gap.start) + 30) ?? gap.end)
   const [saving, setSaving] = useState(false)
-  const gap = freeSegmentsForSlot(target.slot).find((item) => toMinutes(start) >= toMinutes(item.start) && toMinutes(start) < toMinutes(item.end)) ?? freeSegmentsForSlot(target.slot)[0]
-  const startOptions = gap ? timeOptions.filter((time) => toMinutes(time) >= toMinutes(gap.start) && toMinutes(time) < toMinutes(gap.end)) : []
-  const endOptions = gap ? timeOptions.filter((time) => toMinutes(time) > toMinutes(start) && toMinutes(time) <= toMinutes(gap.end)) : []
-  const save = async () => { if (!studentId || !gap || toMinutes(start) >= toMinutes(end) || toMinutes(start) < toMinutes(gap.start) || toMinutes(end) > toMinutes(gap.end)) { notify('請選擇正式學生與可用空檔時間'); return } setSaving(true); try { await teacherBookExistingStudent(studentId, target.slot.id, start, end, teacherId); await reload(); close(); notify('已為正式學生建立固定預約') } catch (error) { notify(error instanceof Error ? error.message : '新增預約失敗') } finally { setSaving(false) } }
-  return <div className="modal-backdrop"><div className="modal existing-booking-modal"><button type="button" className="modal-close" onClick={close}><X /></button><div className="eyebrow">ADD EXISTING STUDENT</div><h2>新增固定課</h2>{eligibleStudents.length ? <><Field label="正式學生"><select value={studentId} onChange={(event) => setStudentId(event.target.value)}>{eligibleStudents.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select></Field><div className="form-grid two"><Field label="開始"><TimePicker value={start} options={startOptions} onChange={setStart} /></Field><Field label="結束"><TimePicker value={end} options={endOptions} onChange={setEnd} /></Field></div><small className="field-hint">只設定這位正式學生的上課時間。</small><div className="modal-actions"><button type="button" className="button quiet" onClick={close}>取消</button><button type="button" className="button primary" disabled={saving} onClick={() => void save()}>{saving ? '儲存中…' : '儲存預約'}</button></div></> : <><div className="empty-state"><Users size={25} /><h3>目前沒有可用的正式學生</h3><p>請先完成新生審核並設定學生地區。</p></div><div className="modal-actions"><button type="button" className="button quiet" onClick={close}>關閉</button></div></>}</div></div>
+  const endOptions = gapTimes.filter((time) => toMinutes(time) > toMinutes(start))
+  const valid = Boolean(studentId && isValidBookingRange(start, end, gap))
+
+  const changeStart = (time: string) => {
+    setStart(time)
+    if (toMinutes(time) >= toMinutes(end)) setEnd(gap.end)
+  }
+
+  const save = async () => {
+    if (!valid || saving) return
+    setSaving(true)
+    try {
+      await teacherBookExistingStudent(studentId, slot.id, start, end, teacherId)
+      await reload()
+      close()
+      notify('已為正式學生建立固定預約')
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : ''
+      if (reason === 'booking_not_available' || reason === 'region_locked') {
+        await reload()
+        close()
+        notify('這段時間的空堂或限區已更新，請重新選擇')
+      } else {
+        notify(reason === 'booking_still_open' ? '家長選課結束後才能新增固定課' : reason || '新增預約失敗')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <div className="modal-backdrop">
+    <div className="modal existing-booking-modal" role="dialog" aria-modal="true" aria-labelledby="existing-booking-title">
+      <button type="button" className="modal-close" aria-label="關閉" onClick={close}><X /></button>
+      <h2 id="existing-booking-title">新增固定課</h2>
+      <p>{weekdayLabels[slot.weekday]} {gap.start}–{gap.end}{region && ` · ${region}限定`}</p>
+      {eligibleStudents.length ? <>
+        <Field label="正式學生"><select value={studentId} onChange={(event) => setStudentId(event.target.value)}>{eligibleStudents.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select></Field>
+        <div className="form-grid two">
+          <Field label="開始"><TimePicker value={start} options={gapTimes.slice(0, -1)} onChange={changeStart} /></Field>
+          <Field label="結束"><TimePicker value={end} options={endOptions} onChange={setEnd} /></Field>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="button quiet" onClick={close}>取消</button>
+          <button type="button" className="button primary" disabled={!valid || saving} onClick={() => void save()}>{saving ? '儲存中…' : '儲存預約'}</button>
+        </div>
+      </> : <>
+        <div className="empty-state"><Users size={25} /><h3>{region ? `目前沒有${region}的正式學生` : '目前沒有已設定地區的正式學生'}</h3></div>
+        <div className="modal-actions"><button type="button" className="button quiet" onClick={close}>關閉</button></div>
+      </>}
+    </div>
+  </div>
 }
 
 type AvailabilityDraft = { id?: string; weekday: Weekday; period: 'morning' | 'afternoon'; start: string; end: string; region: Region | null; note: string; enabled: boolean }
@@ -949,25 +1022,48 @@ function BookingActionModal({ booking, slot, teacherId, close, cancel, reload, n
 
 const timetableStudentHues = [0, 28, 213, 151, 271, 333, 180, 52, 245, 103, 302]
 
-function WeeklyTimetableV2({ slots, students, onLongPress, onSlotClick, onBookingClick }: {
+function WeeklyTimetableV2({ slots, students, onGapDoubleTap, onSlotClick, onBookingClick }: {
   slots: AvailabilitySlot[]
   students: Student[]
-  onLongPress: (weekday: Weekday, start: string) => void
+  onGapDoubleTap: (slot: AvailabilitySlot, gap: TimeRange) => void
   onSlotClick: (slot: AvailabilitySlot) => void
   onBookingClick: (booking: Booking, slot: AvailabilitySlot) => void
 }) {
   const firstHour = 8
   const hours = Array.from({ length: 14 }, (_, index) => firstHour + index)
-  const pressTimer = useRef<number | null>(null)
-  const slotLongPressFired = useRef(false)
+  const pendingTap = useRef<{ key: string; timer: number } | null>(null)
+  useEffect(() => () => {
+    if (pendingTap.current) window.clearTimeout(pendingTap.current.timer)
+  }, [])
   const minutes = (value: string) => toMinutes(value)
   const eventStyle = (start: string, end: string) => ({ '--event-offset': (minutes(start) - firstHour * 60) / 60, '--event-duration': (minutes(end) - minutes(start)) / 60 } as CSSProperties)
   const studentsByCreation = [...students].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id))
   const studentHues = new Map(studentsByCreation.map((student, index) => [
     student.id, timetableStudentHues[index] ?? (index * 137.508) % 360,
   ]))
-  const clearPress = () => { if (pressTimer.current !== null) { window.clearTimeout(pressTimer.current); pressTimer.current = null } }
-  const startPress = (weekday: Weekday, hour: number) => { clearPress(); pressTimer.current = window.setTimeout(() => { onLongPress(weekday, `${String(hour).padStart(2, '0')}:00`); pressTimer.current = null }, 800) }
+  const clearPendingTap = () => {
+    const previous = pendingTap.current
+    if (previous) window.clearTimeout(previous.timer)
+    pendingTap.current = null
+    return previous
+  }
+
+  const tapGap = (slot: AvailabilitySlot, gap: TimeRange, key: string, fromKeyboard: boolean) => {
+    const previous = clearPendingTap()
+    if (fromKeyboard) { onSlotClick(slot); return }
+    if (previous?.key === key) { onGapDoubleTap(slot, gap); return }
+
+    // Wait for a possible second tap on the same gap before opening the editor.
+    pendingTap.current = { key, timer: window.setTimeout(() => {
+      pendingTap.current = null
+      onSlotClick(slot)
+    }, 320) }
+  }
+
+  const openBooking = (booking: Booking, slot: AvailabilitySlot) => {
+    clearPendingTap()
+    onBookingClick(booking, slot)
+  }
   const bookingEvent = (booking: Booking, slot: AvailabilitySlot) => {
     const style = { ...eventStyle(booking.start, booking.end), '--student-hue': studentHues.get(booking.studentId) } as CSSProperties
     return <div className="timetable-event timetable-booking student-timetable-event"
@@ -976,11 +1072,11 @@ function WeeklyTimetableV2({ slots, students, onLongPress, onSlotClick, onBookin
       role="button"
       tabIndex={0}
       title={`${booking.studentName} ${booking.start}–${booking.end}`}
-      onClick={() => onBookingClick(booking, slot)}
+      onClick={() => openBooking(booking, slot)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
-          onBookingClick(booking, slot)
+          openBooking(booking, slot)
         }
       }}
     >
@@ -988,8 +1084,6 @@ function WeeklyTimetableV2({ slots, students, onLongPress, onSlotClick, onBookin
       <small>{booking.start}–{booking.end} · {booking.region}</small>
     </div>
   }
-  const startSlotPress = (slot: AvailabilitySlot) => { clearPress(); pressTimer.current = window.setTimeout(() => { slotLongPressFired.current = true; onLongPress(slot.weekday, slot.start); pressTimer.current = null }, 800) }
-  const slotClickProps = (slot: AvailabilitySlot) => ({ role: 'button' as const, tabIndex: 0, onPointerDown: () => startSlotPress(slot), onPointerUp: clearPress, onPointerLeave: clearPress, onPointerCancel: clearPress, onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => event.preventDefault(), onClick: () => { if (slotLongPressFired.current) { slotLongPressFired.current = false; return } onSlotClick(slot) }, onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => { if (event.key === 'Enter' || event.key === ' ') onSlotClick(slot) } })
   return <div className="timetable-panel">
     <div className="timetable-heading">
       <div>
@@ -1008,24 +1102,33 @@ function WeeklyTimetableV2({ slots, students, onLongPress, onSlotClick, onBookin
         const daySlots = slots.filter((slot) => slot.weekday === weekday)
         return <div className="day-column" key={value}>
           <div className="day-heading">{label.replace('星期', '')}</div>
-          {hours.map((hour) => <div className="hour-cell" key={hour}
-            onPointerDown={() => startPress(weekday, hour)}
-            onPointerUp={clearPress}
-            onPointerLeave={clearPress}
-            onPointerCancel={clearPress}
-            onContextMenu={(event) => event.preventDefault()}
-            aria-label={`${label} ${hour}:00 空白格`}
-          />)}
+          {hours.map((hour) => <div className="hour-cell" key={hour} />)}
           {daySlots.flatMap((slot) => [
             ...slot.bookings.map((booking) => bookingEvent(booking, slot)),
-            ...freeSegmentsForSlot(slot).map((segment) => <div className="timetable-open timetable-clickable"
-              style={eventStyle(segment.start, segment.end)}
-              key={`${slot.id}-${segment.start}-${segment.end}`}
-              {...slotClickProps(slot)}
-            >
-              <b>可預約空堂</b>
-              <small>{segment.start}–{segment.end}{slot.presetRegion ? ` · ${slot.presetRegion}` : ''}</small>
-            </div>),
+            ...freeSegmentsForSlot(slot).map((gap) => {
+              const key = `${slot.id}-${gap.start}-${gap.end}`
+              const region = slot.presetRegion ?? slot.dynamicRegion
+              return <div className="timetable-open timetable-clickable"
+                style={eventStyle(gap.start, gap.end)}
+                key={key}
+                role="button"
+                tabIndex={0}
+                aria-label={`${label} ${gap.start}–${gap.end} ${slot.open ? '空堂' : '未開放'}`}
+                aria-keyshortcuts="Shift+Enter"
+                onClick={(event) => tapGap(slot, gap, key, event.detail === 0)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return
+                  event.preventDefault()
+                  if (event.repeat) return
+                  clearPendingTap()
+                  if (event.shiftKey && event.key === 'Enter') onGapDoubleTap(slot, gap)
+                  else onSlotClick(slot)
+                }}
+              >
+                <b>{slot.open ? '可預約空堂' : '未開放'}</b>
+                <small>{gap.start}–{gap.end}{region ? ` · ${region}` : ''}</small>
+              </div>
+            }),
           ])}
         </div>
       })}

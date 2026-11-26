@@ -55,8 +55,13 @@ assert.equal(race.filter((result) => result.rejected.length === 1).length, 1, '�
 const settings = await getSettings('teacher-a')
 assert.ok(settings.tagOptions.includes('天母') && settings.tagOptions.includes('北投') && settings.tagOptions.includes('士林'), '老師應有可管理的地區選項')
 assert.deepEqual(await lookupStudents('陳昀安', 'teacher-b', '333'), { students: [], needsContact: false }, 'B 老師不得看到 A 老師學生')
+const middle = await bookSelections('stu-001', [{ slotId: 'slot-004', start: '15:00', end: '16:00' }], 'teacher-a')
+assert.equal(middle.bookings.length, 1, '家長可以選原始時段中間的課')
 await saveSettings({ ...settings, bookingClose: new Date(Date.now() - 1000).toISOString() }, 'teacher-a')
 const teacherAdded = await teacherBookExistingStudent('stu-003', 'slot-001', '12:00', '13:00', 'teacher-a')
 assert.equal(teacherAdded.studentId, 'stu-003', '搶課結束後老師只能替正式學生新增預約')
+await assert.rejects(teacherBookExistingStudent('stu-003', 'slot-004', '15:45', '16:30', 'teacher-a'), /目前不可預約/, '後段預約不可與中間課堂重疊')
+const trailingBooking = await teacherBookExistingStudent('stu-003', 'slot-004', '16:00', '17:00', 'teacher-a')
+assert.equal(trailingBooking.start, '16:00', '中間已預約時，老師仍可在同一時段的後段空堂加課')
 
 console.log('Mock verification passed: privacy, regional locking, gap calculation, and race behavior.')
